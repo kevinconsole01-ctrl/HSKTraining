@@ -1,0 +1,3907 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Zìgé — studio del vocabolario HSK 2.0 e 3.0: flashcard con ripetizione spaziata, quiz, toni, scrittura e simulazione d'esame.">
+<meta name="theme-color" content="#F0F1EE">
+<title>Zìgé · vocabolario HSK</title>
+
+<!-- Due sole famiglie: Bricolage Grotesque per l'interfaccia, Noto Serif SC
+     per gli hanzi (stile 宋, quello dei dizionari). Google Fonts serve i
+     glifi CJK a sottinsieme, quindi non scarica l'intero dizionario. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Noto+Serif+SC:wght@400;600;900&display=swap" rel="stylesheet">
+
+<style>
+/* =====================================================================
+   1. TOKEN
+   Tre materiali: carta, inchiostro, timbro. Nient'altro.
+   Il timbro compare solo su conferma, mastery e serie — mai come colore
+   decorativo, mai in un gradiente.
+   ===================================================================== */
+:root {
+  --paper:        #F0F1EE;  /* carta — grigio-verde freddo, non cream caldo */
+  --paper-raised: #F8F9F6;
+  --ink:          #16181A;
+  --ink-soft:     #5B6165;
+  --ink-faint:    #696C69;  /* 4.69:1 su carta, 5.03:1 sul rialzato */
+  --rule:         #D6DAD4;
+  --rule-strong:  #AFB6AC;
+  --seal:         #B3232A;  /* 朱砂, scurito quanto basta per il testo */
+  --seal-paper:   #FFFFFF;
+  --grid:         #C9CFC7;
+  --outline:      #868C84;  /* contorno dei tratti: 3.26:1 sul rialzato */
+
+  --font-ui:    "Bricolage Grotesque", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-hanzi: "Noto Serif SC", "Songti SC", "SimSun", "Hiragino Sans GB", serif;
+
+  /* scala tipografica — rapporto 1.25 */
+  --t-xs:   0.75rem;
+  --t-sm:   0.875rem;
+  --t-base: 1rem;
+  --t-md:   1.25rem;
+  --t-lg:   1.563rem;
+  --t-xl:   1.953rem;
+
+  --sp-1: 0.25rem;  --sp-2: 0.5rem;  --sp-3: 0.75rem; --sp-4: 1rem;
+  --sp-5: 1.5rem;   --sp-6: 2rem;    --sp-7: 3rem;    --sp-8: 4rem;
+
+  --radius: 3px;   /* solo dove serve: non è il raggio di un kit di card */
+  --tap: 44px;     /* target minimo su telefono */
+}
+
+[data-theme="dark"] {
+  --paper:        #0E1413;  /* pietra d'inchiostro, non nero pieno */
+  --paper-raised: #151D1B;
+  --ink:          #E7EAE6;
+  --ink-soft:     #A3ACA7;
+  --ink-faint:    #919A95;
+  --rule:         #232C29;
+  --rule-strong:  #3C4744;
+  --seal:         #E8705C;
+  --seal-paper:   #0E1413;
+  --grid:         #2B3532;
+  --outline:      #66706C;  /* contorno dei tratti: 3.35:1 sul rialzato */
+}
+
+/* =====================================================================
+   2. BASE
+   ===================================================================== */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* `hidden` va protetto: diverse regole di classe impostano `display`
+   (`.grades` è grid, `.card-audio` è flex) e sovrascriverebbero il
+   `display: none` del browser, lasciando in piedi elementi che devono
+   sparire — per esempio i pulsanti di valutazione a sessione finita. */
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--t-base);
+  font-optical-sizing: auto;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+h1, h2, h3, p, figure { margin: 0; }
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--seal);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+
+/* il carattere cinese va sempre in font dedicato, mai nel fallback di
+   sistema che altrimenti ricade su un sans generico */
+.hanzi {
+  font-family: var(--font-hanzi);
+  font-weight: 600;
+  line-height: 1.05;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* =====================================================================
+   3. IMPAGINATO
+   Griglia a due aree: la barra laterale con le modalità e il contenuto.
+   Su telefono la barra scende in fondo, dove il pollice arriva.
+   ===================================================================== */
+.shell {
+  display: grid;
+  grid-template-areas:
+    "top"
+    "main"
+    "rail";
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  min-height: 100dvh;
+}
+
+.topbar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  padding-top: max(var(--sp-3), env(safe-area-inset-top));
+  border-bottom: 1px solid var(--rule);
+}
+
+.brand { display: flex; align-items: center; gap: var(--sp-3); margin-right: auto; }
+
+/* il marchio è una 米字格 in miniatura: la stessa griglia della card */
+.brand__mark { width: 30px; height: 30px; display: block; }
+.brand__name { font-size: var(--t-md); font-weight: 600; letter-spacing: -0.01em; }
+.brand__sub  { display: none; font-size: var(--t-xs); color: var(--ink-faint); }
+
+.main { grid-area: main; padding: var(--sp-5) var(--sp-4) var(--sp-6); }
+.main > section { max-width: 34rem; margin-inline: auto; }
+
+.rail {
+  grid-area: rail;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  border-top: 1px solid var(--rule);
+  background: var(--paper);
+  padding-bottom: env(safe-area-inset-bottom);
+  position: sticky;
+  bottom: 0;
+}
+
+.rail__btn {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: var(--sp-2) 2px calc(var(--sp-2) + 4px);
+  color: var(--ink-faint);
+  border-top: 2px solid transparent;
+  margin-top: -1px;
+  min-height: var(--tap);
+  font-size: var(--t-xs);
+}
+.rail__btn svg { width: 21px; height: 21px; }
+.rail__btn[aria-current="page"] {
+  color: var(--ink);
+  border-top-color: var(--ink);
+  font-weight: 600;
+}
+
+/* =====================================================================
+   4. LA CARTA DA ESERCIZI (米字格)
+   L'elemento che porta il peso del design: la flashcard *è* il quadrato
+   in cui si esercita a scrivere i caratteri.
+   ===================================================================== */
+.drill {
+  position: relative;
+  aspect-ratio: 1;
+  width: 100%;
+  max-width: 22rem;
+  margin-inline: auto;
+  perspective: 1400px;
+}
+
+.drill__inner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 480ms cubic-bezier(.2, .8, .25, 1);
+}
+.drill.is-flipped .drill__inner { transform: rotateY(180deg); }
+
+.drill__face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5);
+  text-align: center;
+}
+.drill__face--back { transform: rotateY(180deg); }
+
+/* la griglia: croce e diagonali tratteggiate, come sul quaderno.
+   Il tratto deve restare sotto il carattere: se la griglia si vede prima
+   dell'hanzi ha vinto lei, e l'errore è esattamente l'opposto. */
+.drill__grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.drill__grid rect.frame { fill: var(--paper-raised); stroke: var(--rule); stroke-width: 1; }
+.drill__grid line.guide { stroke: var(--grid); stroke-width: .75; stroke-dasharray: 4 6; }
+
+.drill__content { position: relative; z-index: 1; }
+
+.drill__hanzi {
+  font-size: clamp(5rem, 34vw, 9rem);
+  overflow-wrap: anywhere;
+}
+/* il retro porta la pronuncia e la glossa: il testo inglese non deve mai
+   toccare il bordo della cornice, e deve poter reggere anche una glossa
+   lunga senza trasformarsi in un muro */
+.drill__face--back { padding: var(--sp-6) var(--sp-5); }
+
+.drill__pinyin {
+  font-size: var(--t-xl);
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+.drill__meaning {
+  margin-top: var(--sp-3);
+  max-width: 24ch;
+  margin-inline: auto;
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+.drill__trad {
+  margin-top: var(--sp-3);
+  font-family: var(--font-hanzi);
+  font-size: var(--t-md);
+  color: var(--ink-faint);
+}
+
+/* didascalia sotto la griglia: il livello della carta è informazione
+   strutturale, ma dentro la 米字格 finirebbe a gara con l'hanzi */
+.drill__level {
+  display: block;
+  margin-top: var(--sp-3);
+  text-align: center;
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  letter-spacing: 0.04em;
+}
+
+/* =====================================================================
+   5. PULSANTI
+   ===================================================================== */
+.audio-btn {
+  display: inline-grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: 1px solid var(--rule-strong);
+  border-radius: 50%;
+  color: var(--ink-soft);
+  transition: color 160ms, border-color 160ms, transform 90ms;
+}
+.audio-btn svg { width: 19px; height: 19px; }
+.audio-btn:hover { color: var(--ink); border-color: var(--ink-soft); }
+.audio-btn:active { transform: scale(.93); }
+.audio-btn.is-speaking { color: var(--seal); border-color: var(--seal); }
+
+/* le quattro valutazioni: un'unica riga di quattro, piena, sotto il pollice */
+.grades {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-2);
+  max-width: 34rem;
+  margin: var(--sp-5) auto 0;
+}
+.grade {
+  display: grid;
+  gap: 1px;
+  min-height: 52px;
+  padding: var(--sp-2) 4px;
+  align-content: center;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  text-align: center;
+  transition: background 140ms, border-color 140ms, transform 90ms;
+}
+.grade:hover { border-color: var(--ink-soft); }
+.grade:active { transform: scale(.975); }
+.grade__label { font-size: var(--t-sm); font-weight: 600; }
+.grade__key   { font-size: var(--t-xs); color: var(--ink-faint); }
+.grade[data-q="1"]:hover { border-color: var(--seal); color: var(--seal); }
+.grade[data-q="3"]:hover,
+.grade[data-q="4"]:hover,
+.grade[data-q="5"]:hover { border-color: var(--ink); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--tap);
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+.btn--quiet {
+  background: none;
+  color: var(--ink-soft);
+  border-color: var(--rule-strong);
+}
+.btn--quiet:hover { color: var(--ink); border-color: var(--ink-soft); }
+
+/* =====================================================================
+   5b. QUIZ E TONI
+   Qui il riquadro della 米字格 non si ripete: è la firma della modalità
+   carte. Ripeterlo in ogni schermata lo trasformerebbe in decorazione.
+   ===================================================================== */
+.quiz__prompt {
+  display: grid;
+  place-items: center;
+  gap: var(--sp-3);
+  min-height: 9rem;
+  padding: var(--sp-3) 0 var(--sp-5);
+  text-align: center;
+}
+.quiz__prompt-hanzi { font-size: clamp(3rem, 17vw, 4.75rem); }
+.quiz__prompt-text {
+  font-size: var(--t-lg);
+  line-height: 1.35;
+  max-width: 26ch;
+  color: var(--ink);
+}
+.quiz__prompt-note { font-size: var(--t-xs); color: var(--ink-faint); }
+
+.options { display: grid; gap: var(--sp-2); }
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: 56px;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  text-align: left;
+  transition: border-color 140ms, background 140ms, opacity 200ms;
+}
+.option__text { font-size: var(--t-md); line-height: 1.3; }
+.option__text.is-hanzi { font-size: var(--t-xl); }
+.option__key { font-size: var(--t-xs); color: var(--ink-faint); flex: none; }
+.option:hover:not(:disabled) { border-color: var(--ink-soft); }
+.option:disabled { cursor: default; }
+
+/* la conferma è l'unico posto in cui il timbro tocca il contenuto */
+.option.is-correct {
+  border-color: var(--seal);
+  background: color-mix(in srgb, var(--seal) 9%, var(--paper-raised));
+}
+.option.is-correct .option__text { color: var(--seal); }
+.option.is-wrong {
+  border-color: var(--seal);
+  background: color-mix(in srgb, var(--seal) 4%, var(--paper-raised));
+  border-style: dashed;
+}
+.option.is-wrong .option__text { color: var(--ink-soft); text-decoration: line-through; text-decoration-thickness: 1px; }
+.option.is-faded { opacity: .4; }
+
+/* i quattro toni: il contorno è il tono, non un'icona decorativa */
+.tone-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-2); }
+
+.tone-btn {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-2);
+  min-height: 80px;
+  padding: var(--sp-3) var(--sp-1);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  transition: border-color 140ms, background 140ms, opacity 200ms;
+}
+.tone-btn svg { width: 42px; height: 24px; }
+.tone-btn__n { font-size: var(--t-xs); color: var(--ink-faint); }
+.tone-btn__n b { font-weight: 600; color: var(--ink-soft); }
+.tone-btn:hover:not(:disabled) { border-color: var(--ink-soft); }
+.tone-btn:disabled { cursor: default; }
+.tone-btn.is-correct {
+  border-color: var(--seal);
+  background: color-mix(in srgb, var(--seal) 9%, var(--paper-raised));
+  color: var(--seal);
+}
+.tone-btn.is-correct .tone-btn__n b { color: var(--seal); }
+.tone-btn.is-wrong {
+  border-color: var(--seal);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--seal) 4%, var(--paper-raised));
+}
+.tone-btn.is-faded { opacity: .4; }
+
+.feedback {
+  min-height: 3rem;
+  margin-top: var(--sp-4);
+  text-align: center;
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+.feedback strong { color: var(--ink); font-weight: 600; }
+.feedback .hanzi { color: var(--ink); }
+
+.audio-btn--lg { width: 72px; height: 72px; }
+.audio-btn--lg svg { width: 28px; height: 28px; }
+
+/* riepilogo di fine sessione */
+.score {
+  display: grid;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-5);
+}
+.score__value {
+  font-size: clamp(3rem, 14vw, 4rem);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.score__label { font-size: var(--t-sm); color: var(--ink-soft); }
+
+/* =====================================================================
+   5c. SCRITTURA ED ESAME
+   La scrittura torna alla 米字格, ma qui la griglia è uno strumento:
+   serve a collocare i tratti, non a fare da firma della schermata.
+   ===================================================================== */
+.write__head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.write__pinyin {
+  font-size: var(--t-xl);
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+.write__meaning {
+  margin-top: var(--sp-1);
+  max-width: 28ch;
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.write__board { width: min(100%, 19rem); margin-inline: auto; }
+.write__grid {
+  position: relative;
+  aspect-ratio: 1;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-strong);
+}
+.write__guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.write__guides line { stroke: var(--grid); stroke-width: .75; stroke-dasharray: 4 6; }
+.write__canvas { position: absolute; inset: 0; touch-action: none; }
+.write__canvas svg { display: block; }
+
+.write__chars {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+.char-chip {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  font-family: var(--font-hanzi);
+  font-size: var(--t-md);
+  transition: border-color 140ms, background 140ms;
+}
+.char-chip[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, var(--paper-raised));
+}
+
+.write__hint {
+  min-height: 2.6em;
+  margin-top: var(--sp-3);
+  text-align: center;
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+.write__hint strong { color: var(--seal); font-weight: 600; }
+
+.write__actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+.write__actions .btn {
+  justify-content: center;
+  padding-inline: var(--sp-2);
+}
+.btn:disabled { opacity: .45; cursor: default; }
+
+/* --- esame --- */
+.exam-intro {
+  border: 1px solid var(--rule);
+  background: var(--paper-raised);
+  padding: var(--sp-5) var(--sp-4);
+}
+.exam-intro__kicker { font-size: var(--t-xs); color: var(--ink-faint); }
+.exam-intro__title {
+  margin-top: var(--sp-2);
+  font-size: var(--t-lg);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.exam-intro__text {
+  margin-top: var(--sp-3);
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+.exam-facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+  margin: var(--sp-5) 0;
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--rule);
+}
+.exam-facts dt { font-size: var(--t-xs); color: var(--ink-faint); }
+.exam-facts dd {
+  margin-top: 2px;
+  font-size: var(--t-md);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.exam__timer {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.exam__timer.is-urgent { color: var(--seal); }
+
+.option.is-chosen { border-color: var(--ink); }
+
+.review {
+  display: grid;
+  gap: var(--sp-3);
+  margin: var(--sp-5) 0 var(--sp-4);
+  text-align: left;
+}
+.review__title { font-size: var(--t-sm); color: var(--ink-soft); }
+.review__item {
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--rule);
+}
+.review__word {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.review__word .hanzi { font-size: var(--t-lg); color: var(--ink); }
+.review__pinyin { font-size: var(--t-sm); color: var(--ink-soft); }
+.review__meaning {
+  margin-top: 2px;
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+.review__given {
+  margin-top: var(--sp-1);
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+.review__given s { text-decoration-thickness: 1px; }
+
+/* =====================================================================
+   5d. PROGRESSI E DATI
+   La dashboard legge i progressi, non li produce: qui il timbro può
+   tornare sulla serie, che è l'unico dato che merita una conferma.
+   ===================================================================== */
+.dash { display: grid; gap: var(--sp-5); }
+
+.dash__block { border-top: 1px solid var(--rule); padding-top: var(--sp-4); }
+
+.dash__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.dash__title { font-size: var(--t-sm); font-weight: 600; letter-spacing: 0.01em; }
+.dash__meta {
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.dash__note {
+  margin-top: var(--sp-3);
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  line-height: 1.5;
+}
+.dash__empty {
+  padding: var(--sp-3) 0;
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+/* --- serie --- */
+.streak {
+  position: relative;
+  padding: var(--sp-4);
+  border: 1px solid var(--rule);
+  background: var(--paper-raised);
+}
+.streak__line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding-right: 3.75rem;
+}
+.streak__value {
+  font-size: clamp(2.75rem, 13vw, 3.75rem);
+  font-weight: 600;
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.streak__label { font-size: var(--t-sm); color: var(--ink-soft); }
+.streak__note {
+  margin-top: var(--sp-2);
+  padding-right: 3.75rem;
+  font-size: var(--t-xs);
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+/* il timbro: solo la serie lo porta in questa schermata */
+.seal-mark {
+  position: absolute;
+  top: var(--sp-4);
+  right: var(--sp-4);
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 2px solid var(--seal);
+  border-radius: 2px;
+  color: var(--seal);
+  font-family: var(--font-hanzi);
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  transform: rotate(-3deg);
+}
+
+/* --- numeri di oggi e dell'esame --- */
+.dash-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+.dash-facts--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dash-facts dt { font-size: var(--t-xs); color: var(--ink-faint); }
+.dash-facts dd {
+  margin: 2px 0 0;
+  font-size: var(--t-md);
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- parole per stato --- */
+.stack {
+  display: flex;
+  height: 12px;
+  background: var(--rule);
+  overflow: hidden;
+}
+.stack__seg {
+  height: 100%;
+  border-right: 2px solid var(--paper);
+  transition: width 240ms ease;
+}
+.stack__seg:last-child { border-right: 0; }
+.stack__seg--new      { background: var(--rule-strong); }
+.stack__seg--learning { background: var(--ink-soft); }
+.stack__seg--review   { background: var(--ink); }
+
+.legend {
+  display: grid;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.legend__item {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--t-sm);
+}
+.legend__dot { width: 10px; height: 10px; }
+.legend__dot--new      { background: var(--rule-strong); }
+.legend__dot--learning { background: var(--ink-soft); }
+.legend__dot--review   { background: var(--ink); }
+.legend__label { color: var(--ink-soft); }
+.legend__value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* --- ultimi sette giorni --- */
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+.week__col { display: grid; justify-items: center; gap: var(--sp-1); min-width: 0; }
+.week__value {
+  font-size: var(--t-xs);
+  color: var(--ink-soft);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.week__track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 76px;
+  background: var(--paper-raised);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.week__bar { width: 100%; background: var(--ink); }
+.week__bar--zero { background: var(--rule); }
+.week__day {
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  text-transform: capitalize;
+}
+.week__col--today .week__day { color: var(--ink); font-weight: 600; }
+.week__col--today .week__track { border-bottom-color: var(--ink); border-bottom-width: 2px; }
+
+/* --- parole più sbagliate --- */
+.mistakes { margin: 0; padding: 0; list-style: none; }
+.mistake {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto var(--tap);
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--rule);
+}
+.mistake:first-child { border-top: 0; padding-top: 0; }
+.mistake__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.mistake__hanzi { font-size: var(--t-md); }
+.mistake__pinyin { font-size: var(--t-sm); color: var(--ink-soft); }
+.mistake__meaning {
+  display: -webkit-box;
+  margin-top: 1px;
+  overflow: hidden;
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  line-height: 1.4;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.mistake__count {
+  min-width: 2.5ch;
+  text-align: right;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- dati: export, import, conferma --- */
+.dash__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+.dash__actions .btn { justify-content: center; padding-inline: var(--sp-2); }
+.dash__actions .btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+.confirm {
+  margin-top: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--seal);
+  background: var(--paper-raised);
+}
+.confirm__text { font-size: var(--t-sm); line-height: 1.45; }
+.confirm__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+.confirm__actions .btn { justify-content: center; }
+
+/* =====================================================================
+   6. TESTATA SESSIONE + STATO DELLA CODA
+   ===================================================================== */
+.session {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+}
+.session__count { font-variant-numeric: tabular-nums; }
+.session__count strong { color: var(--ink); font-weight: 600; }
+
+.progress {
+  height: 2px;
+  background: var(--rule);
+  margin-bottom: var(--sp-5);
+}
+.progress__bar {
+  height: 100%;
+  width: 0;
+  background: var(--ink);
+  transition: width 300ms ease;
+}
+
+.flip-hint {
+  margin-top: var(--sp-3);
+  text-align: center;
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+.flip-hint kbd {
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  padding: 1px 5px;
+}
+
+.card-audio { display: flex; justify-content: center; margin-top: var(--sp-4); }
+
+/* =====================================================================
+   7. STATO FINALE E STATI D'ERRORE
+   Un vuoto non è umore: è un invito all'azione.
+   ===================================================================== */
+.empty { text-align: center; padding: var(--sp-6) 0; }
+
+.empty__stamp {
+  width: 108px;
+  height: 108px;
+  margin: 0 auto var(--sp-5);
+  color: var(--seal);
+}
+
+.empty__title { font-size: var(--t-lg); font-weight: 600; margin-bottom: var(--sp-2); }
+.empty__text  { color: var(--ink-soft); max-width: 26rem; margin: 0 auto var(--sp-5); }
+
+/* =====================================================================
+   8. FOGLIO IMPOSTAZIONI
+   ===================================================================== */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  align-items: end;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+.sheet[hidden] { display: none; }
+
+.sheet__panel {
+  background: var(--paper);
+  border-top: 1px solid var(--rule);
+  padding: var(--sp-4);
+  padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom));
+  max-height: 88dvh;
+  overflow-y: auto;
+}
+.sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-4);
+}
+.sheet__title { font-size: var(--t-md); font-weight: 600; }
+
+.field { margin-bottom: var(--sp-5); }
+.field__label {
+  display: block;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  margin-bottom: var(--sp-2);
+}
+.field__hint { display: block; font-size: var(--t-xs); color: var(--ink-faint); margin-top: var(--sp-2); }
+
+/* segmentato: due set HSK, mutuamente esclusivi */
+.segmented { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+.segmented button {
+  min-height: var(--tap);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+}
+.segmented button[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+}
+
+/* selezione dei livelli: più livelli insieme */
+.levels { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.level-chip {
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  min-width: 62px;
+  min-height: 52px;
+  padding: var(--sp-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  color: var(--ink-soft);
+  line-height: 1.2;
+}
+.level-chip__n    { font-size: var(--t-base); font-weight: 600; }
+.level-chip__size { font-size: var(--t-xs); color: var(--ink-faint); }
+.level-chip[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+.level-chip[aria-pressed="true"] .level-chip__size { color: var(--paper); opacity: .7; }
+
+.stepper { display: flex; align-items: center; gap: var(--sp-3); }
+.stepper button {
+  width: var(--tap); height: var(--tap);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  font-size: var(--t-md);
+}
+.stepper output { font-size: var(--t-md); font-variant-numeric: tabular-nums; min-width: 3ch; text-align: center; }
+
+/* =====================================================================
+   9. PANNELLI DELLE MODALITÀ NON ANCORA ATTIVE
+   ===================================================================== */
+.pending { border: 1px dashed var(--rule-strong); padding: var(--sp-5); text-align: center; }
+.pending__step { font-size: var(--t-xs); color: var(--ink-faint); margin-bottom: var(--sp-2); }
+.pending__title { font-size: var(--t-lg); font-weight: 600; margin-bottom: var(--sp-2); }
+.pending__text { color: var(--ink-soft); font-size: var(--t-sm); }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 60;
+  background: var(--ink);
+  color: var(--paper);
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--radius);
+  font-size: var(--t-sm);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms;
+}
+.toast.is-visible { opacity: 1; }
+
+/* =====================================================================
+   10. DESKTOP — la barra torna verticale a lato
+   ===================================================================== */
+@media (min-width: 880px) {
+  .shell {
+    grid-template-areas:
+      "top  top"
+      "rail main";
+    grid-template-columns: 168px minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    max-width: 74rem;
+    margin-inline: auto;
+    border-inline: 1px solid var(--rule);
+  }
+
+  .topbar { padding-inline: var(--sp-5); }
+  .brand__sub { display: block; }
+
+  .rail {
+    grid-template-columns: 1fr;
+    align-content: start;
+    border-top: none;
+    border-right: 1px solid var(--rule);
+    padding: var(--sp-4) var(--sp-3);
+    position: sticky;
+    top: 0;
+    align-self: start;
+  }
+  .rail__btn {
+    grid-template-columns: 21px 1fr;
+    justify-items: start;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-3);
+    border-top: none;
+    border-left: 2px solid transparent;
+    margin-top: 0;
+    margin-left: calc(var(--sp-3) * -1);
+    font-size: var(--t-sm);
+  }
+  .rail__btn[aria-current="page"] { border-left-color: var(--ink); }
+
+  .main { padding: var(--sp-7) var(--sp-6); }
+  .sheet { align-items: center; justify-items: center; }
+  .sheet__panel { width: min(34rem, 92vw); border: 1px solid var(--rule); border-radius: var(--radius); }
+  .toast { bottom: var(--sp-5); }
+}
+
+/* la tastiera scorciata ha senso solo dove c'è una tastiera */
+@media (hover: none) { .flip-hint { display: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .drill__inner { transition-duration: 1ms; }
+  * { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="shell">
+
+  <!-- ---------------------------------------------------------- testata -->
+  <header class="topbar">
+    <div class="brand">
+      <!-- il marchio è la stessa griglia della card, in miniatura -->
+      <svg class="brand__mark" viewBox="0 0 30 30" aria-hidden="true">
+        <rect x="1" y="1" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="15" y1="1" x2="15" y2="29" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity=".45"/>
+        <line x1="1" y1="15" x2="29" y2="15" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity=".45"/>
+        <line x1="1" y1="1" x2="29" y2="29" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity=".25"/>
+        <line x1="29" y1="1" x2="1" y2="29" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity=".25"/>
+      </svg>
+      <div>
+        <span class="brand__name">Zìgé</span>
+        <span class="brand__sub">vocabolario HSK</span>
+      </div>
+    </div>
+
+    <button class="btn btn--quiet" id="open-settings" aria-haspopup="dialog">
+      <span id="level-summary">HSK 3.0 · 1–4</span>
+    </button>
+
+    <button class="audio-btn" id="theme-toggle" aria-label="Passa al tema scuro">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- ------------------------------------------------------------ main -->
+  <main class="main">
+
+    <!-- PASSO 1 — flashcard con ripetizione spaziata -->
+    <section id="view-flashcard" aria-labelledby="flashcard-title">
+      <h1 class="visually-hidden" id="flashcard-title">Flashcard</h1>
+
+      <div class="session">
+        <span>Coda di oggi</span>
+        <span class="session__count" id="queue-count"><strong>0</strong> / 0</span>
+      </div>
+      <div class="progress"><div class="progress__bar" id="queue-progress"></div></div>
+
+      <!-- la card: fronte e retro dentro un cubo che ruota -->
+      <div class="drill" id="drill">
+        <div class="drill__inner">
+
+          <div class="drill__face drill__face--front">
+            <svg class="drill__grid" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="frame" x=".5" y=".5" width="99" height="99" fill="none"/>
+              <line class="guide" x1="50" y1="0" x2="50" y2="100"/>
+              <line class="guide" x1="0" y1="50" x2="100" y2="50"/>
+              <line class="guide" x1="0" y1="0" x2="100" y2="100"/>
+              <line class="guide" x1="100" y1="0" x2="0" y2="100"/>
+            </svg>
+            <div class="drill__content">
+              <p class="hanzi drill__hanzi" id="card-hanzi">—</p>
+            </div>
+          </div>
+
+          <div class="drill__face drill__face--back">
+            <svg class="drill__grid" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <!-- il retro porta la glossa, non un carattere: la griglia
+                   resta solo come cornice, altrimenti attraversa il testo -->
+              <rect class="frame" x=".5" y=".5" width="99" height="99" fill="none"/>
+            </svg>
+            <div class="drill__content">
+              <p class="drill__pinyin" id="card-pinyin">—</p>
+              <p class="drill__meaning" id="card-meaning">—</p>
+              <p class="drill__trad hanzi" id="card-trad"></p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <p class="drill__level" id="card-level"></p>
+
+      <div class="card-audio">
+        <button class="audio-btn" id="card-audio" aria-label="Ascolta la pronuncia">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M11 5 6 9H3v6h3l5 4V5Z"/>
+            <path d="M15.5 8.5a5 5 0 0 1 0 7"/>
+            <path d="M18.5 5.5a9 9 0 0 1 0 13"/>
+          </svg>
+        </button>
+      </div>
+
+      <p class="flip-hint">
+        <kbd>spazio</kbd> gira la carta · <kbd>1</kbd>–<kbd>4</kbd> valuta
+      </p>
+
+      <!-- le quattro valutazioni SM-2 -->
+      <div class="grades" id="grades" role="group" aria-label="Valuta la carta">
+        <button class="grade" data-q="1">
+          <span class="grade__label">Non so</span><span class="grade__key">1</span>
+        </button>
+        <button class="grade" data-q="3">
+          <span class="grade__label">Difficile</span><span class="grade__key">2</span>
+        </button>
+        <button class="grade" data-q="4">
+          <span class="grade__label">Bene</span><span class="grade__key">3</span>
+        </button>
+        <button class="grade" data-q="5">
+          <span class="grade__label">Facile</span><span class="grade__key">4</span>
+        </button>
+      </div>
+
+      <!-- coda esaurita -->
+      <div class="empty" id="queue-empty" hidden>
+        <svg class="empty__stamp" viewBox="0 0 100 100" aria-hidden="true">
+          <rect x="4" y="4" width="92" height="92" rx="3" fill="none" stroke="currentColor" stroke-width="4"/>
+          <text x="50" y="50" text-anchor="middle" dominant-baseline="central"
+                font-family="Noto Serif SC, serif" font-size="52" font-weight="900" fill="currentColor">完</text>
+        </svg>
+        <h2 class="empty__title">Sessione completata</h2>
+        <p class="empty__text" id="empty-text">Hai finito le carte di oggi.</p>
+        <button class="btn btn--quiet" id="empty-settings">Cambia livelli o numero di carte</button>
+      </div>
+    </section>
+
+    <!-- PASSO 2 — quiz a scelta multipla -->
+    <section id="view-quiz" hidden>
+      <h1 class="visually-hidden">Quiz</h1>
+
+      <div class="session">
+        <span id="quiz-variant">Hanzi → significato</span>
+        <span class="session__count" id="quiz-count"><strong>0</strong> / 0</span>
+      </div>
+      <div class="progress"><div class="progress__bar" id="quiz-progress"></div></div>
+
+      <div id="quiz-body">
+        <div class="quiz__prompt" id="quiz-prompt"></div>
+        <div class="options" id="quiz-options"></div>
+        <p class="feedback" id="quiz-feedback"></p>
+      </div>
+
+      <div class="empty" id="quiz-done" hidden>
+        <svg class="empty__stamp" viewBox="0 0 100 100" aria-hidden="true">
+          <rect x="4" y="4" width="92" height="92" rx="3" fill="none" stroke="currentColor" stroke-width="4"/>
+          <text x="50" y="50" text-anchor="middle" dominant-baseline="central"
+                font-family="Noto Serif SC, serif" font-size="52" font-weight="900" fill="currentColor">对</text>
+        </svg>
+        <div class="score">
+          <span class="score__value" id="quiz-score">0/0</span>
+          <span class="score__label">risposte corrette</span>
+        </div>
+        <p class="empty__text" id="quiz-done-text"></p>
+        <button class="btn" id="quiz-restart">Nuova serie</button>
+      </div>
+    </section>
+
+    <!-- PASSO 2 — riconoscimento dei toni -->
+    <section id="view-toni" hidden>
+      <h1 class="visually-hidden">Toni</h1>
+
+      <div class="session">
+        <span>Ascolta e riconosci il tono</span>
+        <span class="session__count" id="tone-count"><strong>0</strong> / 0</span>
+      </div>
+      <div class="progress"><div class="progress__bar" id="tone-progress"></div></div>
+
+      <div id="tone-body">
+        <div class="quiz__prompt">
+          <p class="hanzi quiz__prompt-hanzi" id="tone-hanzi">—</p>
+          <button class="audio-btn audio-btn--lg" id="tone-audio" aria-label="Riproduci la sillaba">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M11 5 6 9H3v6h3l5 4V5Z"/>
+              <path d="M15.5 8.5a5 5 0 0 1 0 7"/>
+              <path d="M18.5 5.5a9 9 0 0 1 0 13"/>
+            </svg>
+          </button>
+          <span class="quiz__prompt-note">Tocca per risentire</span>
+        </div>
+
+        <div class="tone-grid" id="tone-grid"></div>
+        <p class="feedback" id="tone-feedback"></p>
+      </div>
+
+      <div class="empty" id="tone-done" hidden>
+        <svg class="empty__stamp" viewBox="0 0 100 100" aria-hidden="true">
+          <rect x="4" y="4" width="92" height="92" rx="3" fill="none" stroke="currentColor" stroke-width="4"/>
+          <text x="50" y="50" text-anchor="middle" dominant-baseline="central"
+                font-family="Noto Serif SC, serif" font-size="52" font-weight="900" fill="currentColor">声</text>
+        </svg>
+        <div class="score">
+          <span class="score__value" id="tone-score">0/0</span>
+          <span class="score__label">toni riconosciuti</span>
+        </div>
+        <p class="empty__text" id="tone-done-text"></p>
+        <button class="btn" id="tone-restart">Nuova serie</button>
+      </div>
+    </section>
+
+    <!-- PASSO 3 — ordine dei tratti -->
+    <section id="view-write" hidden>
+      <h1 class="visually-hidden">Scrittura</h1>
+
+      <div id="write-body">
+        <div class="write__head">
+          <div>
+            <p class="write__pinyin" id="write-pinyin">—</p>
+            <p class="write__meaning" id="write-meaning"></p>
+          </div>
+          <button class="audio-btn" id="write-audio" aria-label="Ascolta la parola">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M11 5 6 9H3v6h3l5 4V5Z"/>
+              <path d="M15.5 8.5a5 5 0 0 1 0 7"/>
+              <path d="M18.5 5.5a9 9 0 0 1 0 13"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="write__board">
+          <div class="write__grid" id="write-grid">
+            <svg class="write__guides" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <line x1="50" y1="0" x2="50" y2="100"/>
+              <line x1="0" y1="50" x2="100" y2="50"/>
+              <line x1="0" y1="0" x2="100" y2="100"/>
+              <line x1="100" y1="0" x2="0" y2="100"/>
+            </svg>
+            <div class="write__canvas" id="write-canvas" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <div class="write__chars" id="write-chars" aria-label="Caratteri della parola"></div>
+
+        <p class="write__hint" id="write-hint"></p>
+
+        <div class="write__actions">
+          <button class="btn" id="write-show">Guarda</button>
+          <button class="btn btn--quiet" id="write-practice">Scrivi tu</button>
+          <button class="btn btn--quiet" id="write-next">Prossima</button>
+        </div>
+      </div>
+
+      <div class="pending" id="write-fallback" hidden>
+        <h2 class="pending__title">Dati dei tratti non disponibili</h2>
+        <p class="pending__text" id="write-fallback-text">
+          La prima volta che apri la scrittura serve una connessione: i dati dei
+          tratti arrivano da un CDN e poi restano in cache.
+        </p>
+        <p style="margin-top: var(--sp-4)">
+          <button class="btn btn--quiet" id="write-retry">Riprova</button>
+        </p>
+      </div>
+    </section>
+
+    <!-- PASSO 3 — simulazione d'esame -->
+    <section id="view-exam" hidden>
+      <h1 class="visually-hidden">Esame</h1>
+
+      <div id="exam-intro">
+        <div class="exam-intro">
+          <p class="exam-intro__kicker">Simulazione d'esame</p>
+          <h2 class="exam-intro__title">20 domande, 15 minuti</h2>
+          <p class="exam-intro__text">
+            Nessun feedback durante la prova: rispondi e vai avanti. Alla fine
+            trovi il punteggio e l'elenco degli errori da rivedere.
+          </p>
+          <dl class="exam-facts">
+            <div><dt>Domande</dt><dd id="exam-fact-count">20</dd></div>
+            <div><dt>Tempo</dt><dd>15 min</dd></div>
+            <div><dt>Record</dt><dd id="exam-fact-best">—</dd></div>
+          </dl>
+          <button class="btn" id="exam-start">Inizia l'esame</button>
+        </div>
+      </div>
+
+      <div id="exam-body" hidden>
+        <div class="session">
+          <span class="exam__timer" id="exam-timer">15:00</span>
+          <span class="session__count" id="exam-count"><strong>0</strong> / 20</span>
+        </div>
+        <div class="progress"><div class="progress__bar" id="exam-progress"></div></div>
+
+        <div class="quiz__prompt" id="exam-prompt"></div>
+        <div class="options" id="exam-options"></div>
+      </div>
+
+      <div class="empty" id="exam-done" hidden>
+        <svg class="empty__stamp" viewBox="0 0 100 100" aria-hidden="true">
+          <rect x="4" y="4" width="92" height="92" rx="3" fill="none" stroke="currentColor" stroke-width="4"/>
+          <text x="50" y="50" text-anchor="middle" dominant-baseline="central"
+                font-family="Noto Serif SC, serif" font-size="52" font-weight="900" fill="currentColor">试</text>
+        </svg>
+        <div class="score">
+          <span class="score__value" id="exam-score">0/20</span>
+          <span class="score__label" id="exam-summary"></span>
+        </div>
+        <div class="review" id="exam-review"></div>
+        <button class="btn" id="exam-restart">Ripeti l'esame</button>
+      </div>
+    </section>
+
+    <!-- PASSO 4 — progressi -->
+    <section id="view-dashboard" hidden>
+      <h1 class="visually-hidden">Progressi</h1>
+
+      <div class="dash">
+        <div class="streak">
+          <div class="streak__line">
+            <span class="streak__value" id="streak-value">0</span>
+            <span class="streak__label" id="streak-label">giorni di fila</span>
+          </div>
+          <p class="streak__note" id="streak-note"></p>
+          <span class="seal-mark" aria-hidden="true">续</span>
+        </div>
+
+        <dl class="dash-facts">
+          <div><dt>Oggi</dt><dd id="today-total">0</dd></div>
+          <div><dt>Nuove</dt><dd id="today-new">0</dd></div>
+          <div><dt>Ripassi</dt><dd id="today-review">0</dd></div>
+          <div><dt>Corrette</dt><dd id="today-accuracy">—</dd></div>
+        </dl>
+
+        <section class="dash__block" aria-labelledby="status-title">
+          <div class="dash__head">
+            <h2 class="dash__title" id="status-title">Parole</h2>
+            <span class="dash__meta" id="status-total">—</span>
+          </div>
+          <div class="stack" id="status-bar" role="img" aria-label=""></div>
+          <ul class="legend">
+            <li class="legend__item">
+              <span class="legend__dot legend__dot--new" aria-hidden="true"></span>
+              <span class="legend__label">Nuove</span>
+              <span class="legend__value" id="status-new">0</span>
+            </li>
+            <li class="legend__item">
+              <span class="legend__dot legend__dot--learning" aria-hidden="true"></span>
+              <span class="legend__label">In apprendimento</span>
+              <span class="legend__value" id="status-learning">0</span>
+            </li>
+            <li class="legend__item">
+              <span class="legend__dot legend__dot--review" aria-hidden="true"></span>
+              <span class="legend__label">Consolidate</span>
+              <span class="legend__value" id="status-review">0</span>
+            </li>
+          </ul>
+        </section>
+
+        <section class="dash__block" aria-labelledby="week-title">
+          <div class="dash__head">
+            <h2 class="dash__title" id="week-title">Ultimi 7 giorni</h2>
+            <span class="dash__meta" id="week-total">0 carte</span>
+          </div>
+          <div class="week" id="week-chart"></div>
+        </section>
+
+        <section class="dash__block" aria-labelledby="mistakes-title">
+          <div class="dash__head">
+            <h2 class="dash__title" id="mistakes-title">Da rivedere</h2>
+            <span class="dash__meta" id="mistakes-total"></span>
+          </div>
+          <ul class="mistakes" id="mistake-list"></ul>
+          <p class="dash__empty" id="mistakes-empty" hidden>
+            Nessuna parola sbagliata nei livelli attivi. Gli errori di quiz,
+            toni, scrittura ed esame finiscono qui.
+          </p>
+        </section>
+
+        <section class="dash__block" aria-labelledby="exam-stat-title">
+          <div class="dash__head">
+            <h2 class="dash__title" id="exam-stat-title">Esame</h2>
+            <span class="dash__meta" id="exam-taken"></span>
+          </div>
+          <dl class="dash-facts dash-facts--3">
+            <div><dt>Record</dt><dd id="dash-exam-best">—</dd></div>
+            <div><dt>Ultimo</dt><dd id="dash-exam-last">—</dd></div>
+            <div><dt>Tempo</dt><dd id="dash-exam-time">—</dd></div>
+          </dl>
+        </section>
+
+        <section class="dash__block" aria-labelledby="data-title">
+          <div class="dash__head">
+            <h2 class="dash__title" id="data-title">I tuoi dati</h2>
+          </div>
+          <div class="dash__actions">
+            <button class="btn btn--quiet" id="export-json">Esporta JSON</button>
+            <button class="btn btn--quiet" id="export-csv">CSV per Anki</button>
+            <button class="btn btn--quiet" id="import-json">Importa JSON</button>
+          </div>
+          <input type="file" id="import-file" accept=".json,application/json" hidden>
+          <div class="confirm" id="import-confirm" hidden>
+            <p class="confirm__text" id="import-summary"></p>
+            <div class="confirm__actions">
+              <button class="btn" id="import-apply">Sostituisci</button>
+              <button class="btn btn--quiet" id="import-cancel">Annulla</button>
+            </div>
+          </div>
+          <p class="dash__note">
+            Il backup JSON contiene tutti i progressi. Il CSV contiene le parole
+            già viste ed è pronto per Anki: davanti l'hanzi, dietro pinyin e
+            significato, più il livello come tag.
+          </p>
+        </section>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ------------------------------------------------------ navigazione -->
+  <nav class="rail" aria-label="Modalità di studio">
+    <button class="rail__btn" data-view="flashcard" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="5" width="14" height="14" rx="1"/><path d="M17 9h4v10a1 1 0 0 1-1 1h-3"/>
+      </svg>
+      <span>Carte</span>
+    </button>
+    <button class="rail__btn" data-view="quiz">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.7.7-.7 1.1v.5"/><path d="M12 17h.01"/>
+      </svg>
+      <span>Quiz</span>
+    </button>
+    <button class="rail__btn" data-view="toni">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 14c3-6 6-6 9 0s6 6 9 0"/><circle cx="12" cy="5" r="1.4"/>
+      </svg>
+      <span>Toni</span>
+    </button>
+    <button class="rail__btn" data-view="write">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+      </svg>
+      <span>Scrivi</span>
+    </button>
+    <button class="rail__btn" data-view="exam">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6"/>
+      </svg>
+      <span>Esame</span>
+    </button>
+    <button class="rail__btn" data-view="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>
+      </svg>
+      <span>Progressi</span>
+    </button>
+  </nav>
+
+</div>
+
+<!-- --------------------------------------------------- foglio impostazioni -->
+<div class="sheet" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  <div class="sheet__panel">
+    <div class="sheet__head">
+      <h2 class="sheet__title" id="settings-title">Impostazioni</h2>
+      <button class="audio-btn" id="close-settings" aria-label="Chiudi">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="field">
+      <span class="field__label">Sillabo</span>
+      <div class="segmented" id="set-picker">
+        <button data-set="hsk3" aria-pressed="true">HSK 3.0</button>
+        <button data-set="hsk2" aria-pressed="false">HSK 2.0</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="field__label">Livelli studiati</span>
+      <div class="levels" id="level-picker"></div>
+      <span class="field__hint">Puoi selezionare più livelli insieme.</span>
+    </div>
+
+    <div class="field">
+      <span class="field__label">Nuove parole al giorno</span>
+      <div class="stepper">
+        <button id="new-minus" aria-label="Riduci">−</button>
+        <output id="new-output">20</output>
+        <button id="new-plus" aria-label="Aumenta">+</button>
+      </div>
+      <span class="field__hint">Le carte già in apprendimento o in ripasso non sono influenzate da questo valore.</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Zìgé — webapp per il vocabolario HSK.
+   Architettura:
+     · dati     → hsk.json, caricato con fetch e messo in cache su IndexedDB
+     · progressi→ localStorage (piccoli, sincronizzati, esportabili)
+     · logica   → SM-2 per la ripetizione spaziata
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   Costanti e stato
+   --------------------------------------------------------------------- */
+
+/** Chiave di storage dei progressi. */
+const STORE_KEY = "zige.progress.v1";
+const THEME_KEY = "zige.theme";
+
+/** Nome del database IndexedDB per il dataset e i dati dei tratti. */
+const IDB_NAME = "zige-data";
+const IDB_STORE = "datasets";
+const IDB_STROKES = "strokes";
+const IDB_KEY = "hsk";
+
+/**
+ * Configurazione SM-2.
+ * `learningSteps` è il percorso delle carte nuove prima di entrare in
+ * ripasso: si passa al giorno successivo finché la valutazione non è
+ * sufficiente.
+ */
+const SM2 = {
+  defaultEase: 2.5,
+  minEase: 1.3,
+  interval1: 1,    // prima ripetizione riuscita
+  interval2: 6,    // seconda ripetizione riuscita
+  newIntervalCap: 7, // massimo intervallo iniziale per una carta "Facile"
+};
+
+/** Valutazioni: etichetta, qualità SM-2, scostamento di ease. */
+const GRADES = [
+  { q: 1, label: "Non so",    easeDelta: -0.20 },
+  { q: 3, label: "Difficile", easeDelta: -0.15 },
+  { q: 4, label: "Bene",      easeDelta:  0.00 },
+  { q: 5, label: "Facile",    easeDelta: +0.10 },
+];
+
+/**
+ * Mappatura dei campi della riga di hsk.json.
+ * Le righe sono array compatti per tenere basso il peso del file.
+ */
+const F = { simp: 0, trad: 1, pinyin: 2, numeric: 3, meaning: 4, hsk2: 5, hsk3: 6, freq: 7 };
+
+const state = {
+  words: [],      // righe di hsk.json
+  meta: null,     // metadati del dataset
+  progress: null, // vedi defaultProgress()
+  queue: [],      // carte della sessione corrente (indici in words)
+  queuePos: 0,
+  newThisSession: 0,
+};
+
+/** Progressi di default. "Il mio livello" parte da HSK 4 come richiesto. */
+function defaultProgress() {
+  const today = todayISO();
+  return {
+    version: 1,
+    createdAt: today,
+    set: "hsk3",
+    levels: [1, 2, 3, 4],
+    dailyNew: 20,
+    myLevel: 4,
+    /** per parola: { e: ease, i: intervallo in giorni, r: ripetizioni,
+        due: "YYYY-MM-DD", s: stato, seen: bool } */
+    cards: {},
+    /** giorno ISO → { introduced, reviewed, correct, wrong } */
+    days: {},
+    /** indice parola → quante volte è stata sbagliata (quiz, toni, esame) */
+    mistakes: {},
+    /** tono → { ok, err } per la dashboard */
+    toneStats: { 1: { ok: 0, err: 0 }, 2: { ok: 0, err: 0 }, 3: { ok: 0, err: 0 }, 4: { ok: 0, err: 0 } },
+    /** punteggio esame: { best, last, taken } */
+    exams: {},
+  };
+}
+
+/* ---------------------------------------------------------------------
+   Utility
+   --------------------------------------------------------------------- */
+
+const $  = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+/** Data locale in formato ISO (YYYY-MM-DD), senza fusi orari sorprendenti. */
+function todayISO(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Confronto lessicale su YYYY-MM-DD = confronto cronologico. */
+function isDue(iso) { return iso <= todayISO(); }
+
+/** Cicla un valore tra min e max. */
+function clamp(n, min, max) { return Math.min(max, Math.max(min, n)); }
+
+function toast(message) {
+  const el = $("#toast");
+  el.textContent = message;
+  el.classList.add("is-visible");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("is-visible"), 1800);
+}
+
+/* ---------------------------------------------------------------------
+   Storage dei progressi (localStorage)
+   --------------------------------------------------------------------- */
+
+/**
+ * Porta un salvataggio alla forma corrente.
+ * Serve sia all'avvio sia all'import: un backup vecchio o parziale non deve
+ * lasciare `cards`, `days` o `toneStats` a undefined.
+ */
+
+/** Intero non negativo, con fallback a 0. */
+function nonNegativeInt(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+/** Le carte sono l'unica struttura che finisce nelle formule SM-2: va pulita. */
+function normalizeCards(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+
+  for (const [key, value] of Object.entries(raw)) {
+    const index = Number(key);
+    if (!Number.isInteger(index) || index < 0) continue;
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+
+    const ease = Number(value.e);
+    out[index] = {
+      e: Number.isFinite(ease) ? clamp(ease, SM2.minEase, 5) : SM2.defaultEase,
+      i: nonNegativeInt(value.i),
+      r: nonNegativeInt(value.r),
+      due: typeof value.due === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.due)
+        ? value.due
+        : todayISO(),
+      s: value.s === "review" || value.s === "new" ? value.s : "learning",
+      seen: Boolean(value.seen),
+    };
+  }
+
+  return out;
+}
+
+function normalizeDays(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+
+  for (const [key, value] of Object.entries(raw)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) continue;
+    if (!value || typeof value !== "object") continue;
+    out[key] = {
+      introduced: nonNegativeInt(value.introduced),
+      reviewed: nonNegativeInt(value.reviewed),
+      correct: nonNegativeInt(value.correct),
+      wrong: nonNegativeInt(value.wrong),
+    };
+  }
+
+  return out;
+}
+
+function normalizeMistakes(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+
+  for (const [key, value] of Object.entries(raw)) {
+    const index = Number(key);
+    const count = nonNegativeInt(value);
+    if (Number.isInteger(index) && index >= 0 && count > 0) out[index] = count;
+  }
+
+  return out;
+}
+
+function normalizeToneStats(raw) {
+  const out = { 1: { ok: 0, err: 0 }, 2: { ok: 0, err: 0 }, 3: { ok: 0, err: 0 }, 4: { ok: 0, err: 0 } };
+  if (!raw || typeof raw !== "object") return out;
+
+  for (const tone of [1, 2, 3, 4]) {
+    const value = raw[tone];
+    if (value && typeof value === "object") {
+      out[tone] = { ok: nonNegativeInt(value.ok), err: nonNegativeInt(value.err) };
+    }
+  }
+
+  return out;
+}
+
+function normalizeExams(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object") return out;
+
+  for (const field of ["best", "last", "taken", "lastSeconds"]) {
+    if (Number.isFinite(Number(raw[field]))) out[field] = nonNegativeInt(raw[field]);
+  }
+  if (typeof raw.lastDate === "string") out.lastDate = raw.lastDate;
+
+  return out;
+}
+
+function normalizeProgress(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const base = defaultProgress();
+
+  const set = src.set === "hsk2" ? "hsk2" : "hsk3";
+  const maxLevel = set === "hsk3" ? 9 : 6;
+  const levels = Array.isArray(src.levels)
+    ? [...new Set(
+        src.levels
+          .map(Number)
+          .filter(lv => Number.isInteger(lv) && lv >= 1 && lv <= maxLevel)
+      )].sort((a, b) => a - b)
+    : [];
+
+  const dailyNew = Number(src.dailyNew);
+
+  return {
+    ...base,
+    ...src,
+    set,
+    levels: levels.length ? levels : base.levels,
+    dailyNew: Number.isFinite(dailyNew) ? clamp(Math.round(dailyNew), 0, 200) : base.dailyNew,
+    cards: normalizeCards(src.cards),
+    days: normalizeDays(src.days),
+    mistakes: normalizeMistakes(src.mistakes),
+    toneStats: normalizeToneStats(src.toneStats),
+    exams: normalizeExams(src.exams),
+  };
+}
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return defaultProgress();
+    return normalizeProgress(JSON.parse(raw));
+  } catch (e) {
+    console.warn("Progressi illeggibili, riparto da zero.", e);
+    return defaultProgress();
+  }
+}
+
+function saveProgress() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(state.progress));
+  } catch (e) {
+    console.warn("Impossibile salvare i progressi.", e);
+  }
+}
+
+/** Statistiche del giorno corrente, creandole se mancano. */
+function todayStats() {
+  const key = todayISO();
+  const p = state.progress;
+  if (!p.days[key]) p.days[key] = { introduced: 0, reviewed: 0, correct: 0, wrong: 0 };
+  return p.days[key];
+}
+
+/** Serie di giorni consecutivi in cui si è studiato almeno una carta. */
+function computeStreak() {
+  const days = state.progress.days;
+  let streak = 0;
+  for (let i = 0; i < 4000; i++) {
+    const d = days[todayISO(-i)];
+    const studied = d && (d.reviewed > 0 || d.introduced > 0);
+    // oggi può essere ancora in corso: non interrompe la serie
+    if (studied) { streak++; continue; }
+    if (i === 0) continue;
+    break;
+  }
+  return streak;
+}
+
+/* ---------------------------------------------------------------------
+   Dati: fetch + cache su IndexedDB
+   Il dataset è ~1 MB: la prima volta lo scarico, poi resta locale.
+   --------------------------------------------------------------------- */
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    // versione 2: aggiunge lo store dei dati dei tratti, senza perdere
+    // il dataset già salvato dalle versioni precedenti
+    const req = indexedDB.open(IDB_NAME, 2);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+      if (!db.objectStoreNames.contains(IDB_STROKES)) {
+        db.createObjectStore(IDB_STROKES);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbGetFrom(store, key) {
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readonly").objectStore(store).get(key);
+    tx.onsuccess = () => resolve(tx.result);
+    tx.onerror   = () => reject(tx.error);
+  }));
+}
+
+function idbSetIn(store, key, value) {
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readwrite").objectStore(store).put(value, key);
+    tx.onsuccess = () => resolve();
+    tx.onerror   = () => reject(tx.error);
+  }));
+}
+
+function idbGet(key) { return idbGetFrom(IDB_STORE, key); }
+function idbSet(key, value) { return idbSetIn(IDB_STORE, key, value); }
+
+const delay = ms => new Promise(r => setTimeout(r, ms));
+
+/** Massimo tempo che sono disposto ad aspettare IndexedDB prima di scaricare. */
+const IDB_WAIT = 400;
+
+/**
+ * Carica il dataset.
+ *
+ * IndexedDB serve a evitare di riscaricare ~1 MB ogni visita, ma non deve
+ * mai essere un punto di bloccaggio: in modalità privata, con quota piena o
+ * su browser senza storage persistente `openDB` potrebbe non risolvere
+ * mai. Perciò la attendo con un timeout e, se scade, vado avanti col fetch.
+ */
+async function loadDataset() {
+  const cached = await Promise.race([idbGet(IDB_KEY).catch(() => null), delay(IDB_WAIT)]);
+
+  if (cached && cached.doc) {
+    // mostro subito la cache, poi verifico in background se è cambiata
+    refreshDataset(cached.meta);
+    return cached.doc;
+  }
+
+  const doc = await fetchDataset();
+  idbSet(IDB_KEY, { meta: doc.meta, doc }).catch(() => {});
+  return doc;
+}
+
+async function fetchDataset() {
+  const res = await fetch("hsk.json", { cache: "no-cache" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function refreshDataset(cachedMeta) {
+  try {
+    const res = await fetch("hsk.json", { cache: "no-cache" });
+    if (res.status === 304) return;
+    const doc = await res.json();
+    if (doc.meta && doc.meta.generated !== cachedMeta.generated) {
+      await idbSet(IDB_KEY, { meta: doc.meta, doc }).catch(() => {});
+      state.words = doc.words;
+      state.meta = doc.meta;
+      renderLevelPicker();
+      toast("Vocabolario aggiornato");
+    }
+  } catch (e) {
+    /* offline: silenzio, la cache basta */
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Ripetizione spaziata (SM-2)
+   --------------------------------------------------------------------- */
+
+/** Stato di una carta, creandolo al primo incontro. */
+function getCard(index) {
+  const cards = state.progress.cards;
+  let card = cards[index];
+  if (!card) {
+    card = { e: SM2.defaultEase, i: 0, r: 0, due: todayISO(), s: "new", seen: false };
+    cards[index] = card;
+  }
+  return card;
+}
+
+/**
+ * Applica una valutazione alla carta.
+ * q = 1 → la carta torna subito in apprendimento (intervallo 1 giorno).
+ * q >= 3 → procede lungo la curva SM-2.
+ */
+function gradeCard(index, q) {
+  const grade = GRADES.find(g => g.q === q);
+  const card = getCard(index);
+
+  card.e = Math.max(SM2.minEase, card.e + (grade ? grade.easeDelta : 0));
+
+  if (q < 3) {
+    // dimenticato: si ricomincia dalla ripetizione successiva
+    card.r = 0;
+    card.i = SM2.interval1;
+    card.s = "learning";
+  } else {
+    card.r += 1;
+    if (card.r === 1)      card.i = SM2.interval1;
+    else if (card.r === 2) card.i = SM2.interval2;
+    else                   card.i = Math.round(card.i * card.e);
+
+    // una carta "Facile" appena vista può fare un salto più lungo
+    if (q === 5 && card.r === 1) {
+      card.i = Math.max(card.i, SM2.newIntervalCap);
+    }
+    card.s = card.i >= 21 ? "review" : "learning";
+  }
+
+  card.due = todayISO(card.i);
+  card.seen = true;
+  return card;
+}
+
+/* ---------------------------------------------------------------------
+   Costruzione della coda del giorno
+   --------------------------------------------------------------------- */
+
+/** Indici delle parole che appartengono ai livelli selezionati. */
+function deckIndices() {
+  const { set, levels } = state.progress;
+  const idx = set === "hsk3" ? F.hsk3 : F.hsk2;
+  const wanted = new Set(levels);
+  const out = [];
+  for (let i = 0; i < state.words.length; i++) {
+    const lv = state.words[i][idx];
+    if (lv !== null && wanted.has(lv)) out.push(i);
+  }
+  return out;
+}
+
+/**
+ * Coda della sessione: prima le carte scadute (in apprendimento poi in
+ * ripasso), poi le nuove fino al limite giornaliero.
+ */
+function buildQueue() {
+  const stats = todayStats();
+  const budget = Math.max(0, state.progress.dailyNew - (stats.introduced || 0));
+  const deck = deckIndices();
+  const cards = state.progress.cards;
+
+  const learning = [];
+  const review = [];
+  const fresh = [];
+
+  for (const i of deck) {
+    const c = cards[i];
+    if (!c || !c.seen) { fresh.push(i); continue; }
+    if (!isDue(c.due)) continue;
+    if (c.s === "learning") learning.push(i);
+    else review.push(i);
+  }
+
+  // le nuove escono per livello crescente e frequenza decrescente,
+  // così i termini più comuni di ogni livello arrivano prima
+  fresh.sort((a, b) => state.words[a][F.freq] - state.words[b][F.freq]);
+
+  // poiché il deck è già ordinato per livello, prendo a rotazione per non
+  // esaurire sempre il livello più basso prima degli altri
+  const picked = pickRoundRobin(fresh, budget);
+
+  state.queue = [...learning, ...review, ...picked];
+  state.queuePos = 0;
+  state.newThisSession = picked.length;
+}
+
+/** Preleva al massimo `budget` elementi, ruotando tra i livelli. */
+function pickRoundRobin(items, budget) {
+  if (budget <= 0) return [];
+  const idxField = state.progress.set === "hsk3" ? F.hsk3 : F.hsk2;
+  const buckets = new Map();
+  for (const i of items) {
+    const lv = state.words[i][idxField];
+    if (!buckets.has(lv)) buckets.set(lv, []);
+    buckets.get(lv).push(i);
+  }
+  const out = [];
+  const queues = Array.from(buckets.values());
+  let k = 0;
+  while (out.length < budget) {
+    let progressed = false;
+    for (const q of queues) {
+      if (q.length && out.length < budget) { out.push(q.shift()); progressed = true; }
+    }
+    if (!progressed || ++k > 10000) break;
+  }
+  return out;
+}
+
+/** true se la coda del giorno è esaurita. */
+function queueDone() { return state.queuePos >= state.queue.length; }
+
+/** Carta corrente (indice in state.words) oppure null. */
+function currentCardIndex() {
+  return queueDone() ? null : state.queue[state.queuePos];
+}
+
+/* ---------------------------------------------------------------------
+   Rendering della modalità flashcard
+   --------------------------------------------------------------------- */
+
+function renderCard() {
+  const index = currentCardIndex();
+  const drill = $("#drill");
+
+  if (index === null) {
+    drill.hidden = true;
+    $("#grades").hidden = true;
+    $(".flip-hint").hidden = true;
+    $(".card-audio").hidden = true;
+    $("#queue-empty").hidden = false;
+    $("#empty-text").textContent =
+      state.newThisSession > 0
+        ? `Hai introdotto ${state.newThisSession} parole nuove. Le rivedrai secondo la ripetizione spaziata.`
+        : "Hai finito le carte di oggi. Torna domani per la revisione.";
+    renderQueueProgress();
+    return;
+  }
+
+  drill.hidden = false;
+  $("#grades").hidden = false;
+  $(".flip-hint").hidden = false;
+  $(".card-audio").hidden = false;
+  $("#queue-empty").hidden = true;
+
+  const w = state.words[index];
+  drill.classList.remove("is-flipped");
+
+  $("#card-hanzi").textContent  = w[F.simp];
+  $("#card-pinyin").textContent = w[F.pinyin];
+  $("#card-meaning").textContent = w[F.meaning];
+
+  const trad = w[F.trad];
+  $("#card-trad").textContent = trad && trad !== w[F.simp] ? trad : "";
+
+  const lv = state.progress.set === "hsk3" ? w[F.hsk3] : w[F.hsk2];
+  $("#card-level").textContent = `HSK ${state.progress.set === "hsk3" ? "3.0" : "2.0"} · ${formatLevel(lv)}`;
+
+  renderQueueProgress();
+}
+
+/** La fascia ufficiale 7 del HSK 3.0 copre i livelli 7-9. */
+function formatLevel(lv) {
+  if (lv === null) return "—";
+  return state.progress.set === "hsk3" && lv === 7 ? "7–9" : String(lv);
+}
+
+function renderQueueProgress() {
+  const total = state.queue.length;
+  const done = state.queuePos;
+  $("#queue-count").innerHTML = `<strong>${done}</strong> / ${total}`;
+  $("#queue-progress").style.width = total ? `${(done / total) * 100}%` : "0%";
+}
+
+function flipCard() {
+  const index = currentCardIndex();
+  if (index === null) return;
+  $("#drill").classList.toggle("is-flipped");
+}
+
+function handleGrade(q) {
+  const index = currentCardIndex();
+  if (index === null) return;
+
+  // lo stato va letto PRIMA di gradeCard, che segna la carta come vista:
+  // serve a distinguere una vera introduzione da una revisione dimenticata
+  const known = state.progress.cards[index];
+  const isNew = !known || !known.seen;
+
+  const card = gradeCard(index, q);
+  const stats = todayStats();
+
+  if (isNew) stats.introduced += 1;
+  else stats.reviewed += 1;
+
+  if (q >= 3) stats.correct += 1;
+  else stats.wrong += 1;
+
+  state.queuePos += 1;
+  saveProgress();
+  renderCard();
+}
+
+/* ---------------------------------------------------------------------
+   Audio: Web Speech API
+   --------------------------------------------------------------------- */
+
+let zhVoice = null;
+
+function pickVoice() {
+  if (!("speechSynthesis" in window)) return;
+  const voices = speechSynthesis.getVoices();
+  // preferisco una voce femminile cinese, poi qualsiasi zh-CN, poi zh-*
+  zhVoice =
+    voices.find(v => /zh[-_]CN/i.test(v.lang) && /female|婷|Ting|Mei/i.test(v.name)) ||
+    voices.find(v => /zh[-_]CN/i.test(v.lang)) ||
+    voices.find(v => /^zh/i.test(v.lang)) ||
+    null;
+}
+
+function speak(text, button) {
+  if (!("speechSynthesis" in window)) {
+    toast("Il browser non supporta la sintesi vocale");
+    return;
+  }
+  if (!text) return;
+  speechSynthesis.cancel();
+
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "zh-CN";
+  u.rate = 0.85;
+  if (zhVoice) u.voice = zhVoice;
+
+  if (button) {
+    button.classList.add("is-speaking");
+    u.onend = u.onerror = () => button.classList.remove("is-speaking");
+  }
+  speechSynthesis.speak(u);
+}
+
+/* ---------------------------------------------------------------------
+   Quiz a scelta multipla
+   Tre varianti sullo stesso pool di parole: il distrattore deve venire
+   dallo stesso livello, altrimenti la risposta giusta si indovina per
+   esclusione (una parola HSK 1 non ha rivali credibili tra parole HSK 6).
+   --------------------------------------------------------------------- */
+
+const QUIZ_VARIANTS = [
+  { id: "h2m", label: "Hanzi → significato" },
+  { id: "m2h", label: "Significato → hanzi" },
+  { id: "l2h", label: "Ascolto → hanzi" },
+];
+
+const QUIZ_LENGTH = 10;
+const TONE_LENGTH = 10;
+
+/** Stato delle due sessioni, separato dai progressi persistenti. */
+const session = {
+  quiz: { items: [], pos: 0, correct: 0, locked: false, running: false },
+  toni: { items: [], pos: 0, ok: 0, locked: false, running: false },
+};
+
+/** Mescolamento Fisher-Yates in place. */
+function shuffle(list) {
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+/** Campo del livello attivo. */
+function levelField() {
+  return state.progress.set === "hsk3" ? F.hsk3 : F.hsk2;
+}
+
+/**
+ * Pool di studio per le sessioni: prima le parole in apprendimento, poi
+ * quelle consolidate, infine le nuove. Così il quiz non è un ripasso
+ * infinito delle stesse tre parole.
+ */
+function pickStudyPool(count) {
+  const cards = state.progress.cards;
+  const learning = [], review = [], fresh = [];
+
+  for (const i of deckIndices()) {
+    const c = cards[i];
+    if (!c || !c.seen) fresh.push(i);
+    else if (c.s === "review") review.push(i);
+    else learning.push(i);
+  }
+
+  shuffle(learning); shuffle(review); shuffle(fresh);
+  return [...learning, ...review, ...fresh].slice(0, count);
+}
+
+/** Prima accezione: le glosse complete sono troppo lunghe per un'opzione. */
+function shortMeaning(index) {
+  return String(state.words[index][F.meaning]).split(";")[0].trim();
+}
+
+/**
+ * Tre distrattori dello stesso livello della parola bersaglio.
+ * Se il livello è troppo povero (o il deck è appena stato cambiato) si
+ * allarga ai livelli vicini invece di restituire opzioni duplicate.
+ */
+function pickDistractors(targetIndex, textOf, count = 3) {
+  const field = levelField();
+  const targetLevel = state.words[targetIndex][field];
+  const targetText = textOf(targetIndex);
+
+  const sameLevel = [], otherLevel = [];
+  for (const i of deckIndices()) {
+    if (i === targetIndex) continue;
+    const text = textOf(i);
+    if (!text || text === targetText) continue;
+    if (state.words[i][field] === targetLevel) sameLevel.push(i);
+    else otherLevel.push(i);
+  }
+
+  shuffle(sameLevel); shuffle(otherLevel);
+  return [...sameLevel, ...otherLevel].slice(0, count);
+}
+
+/** Costruisce le domande della serie, alternando le tre varianti. */
+function buildQuizItems() {
+  return pickStudyPool(QUIZ_LENGTH).map((idx, k) => ({
+    idx,
+    variant: QUIZ_VARIANTS[k % QUIZ_VARIANTS.length].id,
+  }));
+}
+
+function startQuiz() {
+  const s = session.quiz;
+  s.items = buildQuizItems();
+  s.pos = 0;
+  s.correct = 0;
+  s.locked = false;
+  s.running = true;
+  $("#quiz-done").hidden = true;
+  $("#quiz-body").hidden = false;
+  renderQuiz();
+}
+
+function renderQuiz() {
+  const s = session.quiz;
+  if (!s.running) return;
+
+  if (s.pos >= s.items.length) { finishQuiz(); return; }
+
+  const item = s.items[s.pos];
+  const word = state.words[item.idx];
+  const variant = QUIZ_VARIANTS.find(v => v.id === item.variant);
+  const prompt = $("#quiz-prompt");
+  const options = $("#quiz-options");
+  const feedback = $("#quiz-feedback");
+
+  $("#quiz-variant").textContent = variant.label;
+  feedback.textContent = "";
+  feedback.className = "feedback";
+
+  // testo mostrato: i significati si accorciano, gli hanzi restano interi
+  const textOf = item.variant === "h2m"
+    ? shortMeaning
+    : (i => state.words[i][F.simp]);
+
+  prompt.innerHTML = "";
+  options.innerHTML = "";
+
+  if (item.variant === "h2m") {
+    const el = document.createElement("p");
+    el.className = "hanzi quiz__prompt-hanzi";
+    el.textContent = word[F.simp];
+    prompt.appendChild(el);
+  } else if (item.variant === "m2h") {
+    const el = document.createElement("p");
+    el.className = "quiz__prompt-text";
+    el.textContent = shortMeaning(item.idx);
+    prompt.appendChild(el);
+  } else {
+    // ascolto: solo l'audio, niente testo che riveli la risposta
+    const btn = document.createElement("button");
+    btn.className = "audio-btn audio-btn--lg";
+    btn.setAttribute("aria-label", "Riproduci la parola");
+    btn.innerHTML = audioIcon();
+    btn.addEventListener("click", () => speak(word[F.simp], btn));
+    prompt.appendChild(btn);
+    const note = document.createElement("span");
+    note.className = "quiz__prompt-note";
+    note.textContent = "Quale parola hai sentito?";
+    prompt.appendChild(note);
+    // parte da sola: la sessione è già partita con un tocco
+    setTimeout(() => speak(word[F.simp]), 250);
+  }
+
+  // opzioni: la corretta + tre distrattori, poi mescolate
+  const choices = [item.idx, ...pickDistractors(item.idx, textOf)];
+  shuffle(choices);
+
+  choices.forEach((choiceIndex, k) => {
+    const btn = document.createElement("button");
+    btn.className = "option";
+    btn.dataset.choice = String(choiceIndex);
+
+    const span = document.createElement("span");
+    span.className = "option__text" + (item.variant === "h2m" ? "" : " is-hanzi hanzi");
+    span.textContent = textOf(choiceIndex);
+
+    const key = document.createElement("span");
+    key.className = "option__key";
+    key.textContent = String(k + 1);
+
+    btn.append(span, key);
+    btn.addEventListener("click", () => answerQuiz(choiceIndex));
+    options.appendChild(btn);
+  });
+
+  const done = s.pos;
+  $("#quiz-count").innerHTML = `<strong>${done}</strong> / ${s.items.length}`;
+  $("#quiz-progress").style.width = `${(done / s.items.length) * 100}%`;
+}
+
+/** Valutazione di una risposta: marca le opzioni, registra, avanza. */
+function answerQuiz(choiceIndex) {
+  const s = session.quiz;
+  if (s.locked || !s.running) return;
+  s.locked = true;
+
+  const item = s.items[s.pos];
+  const isRight = choiceIndex === item.idx;
+
+  $$("#quiz-options .option").forEach(btn => {
+    const choice = Number(btn.dataset.choice);
+    btn.disabled = true;
+    if (choice === item.idx) btn.classList.add("is-correct");
+    else if (choice === choiceIndex) btn.classList.add("is-wrong");
+    else btn.classList.add("is-faded");
+  });
+
+  if (isRight) s.correct += 1;
+  recordAnswer(item.idx, isRight);
+
+  const word = state.words[item.idx];
+  const feedback = $("#quiz-feedback");
+  feedback.innerHTML = isRight
+    ? `Giusto — <span class="hanzi">${word[F.simp]}</span> <strong>${word[F.pinyin]}</strong>`
+    : `Era <span class="hanzi">${word[F.simp]}</span> <strong>${word[F.pinyin]}</strong> — ${shortMeaning(item.idx)}`;
+
+  // il ritardo serve a leggere la correzione, non a fare scenografia
+  setTimeout(() => {
+    s.pos += 1;
+    s.locked = false;
+    renderQuiz();
+  }, isRight ? 750 : 1500);
+}
+
+function finishQuiz() {
+  const s = session.quiz;
+  s.running = false;
+  $("#quiz-body").hidden = true;
+  $("#quiz-done").hidden = false;
+  $("#quiz-progress").style.width = "100%";
+  $("#quiz-count").innerHTML = `<strong>${s.items.length}</strong> / ${s.items.length}`;
+  $("#quiz-score").textContent = `${s.correct}/${s.items.length}`;
+
+  const wrong = s.items.length - s.correct;
+  $("#quiz-done-text").textContent = wrong === 0
+    ? "Nessun errore. Alza il livello o aumenta le parole al giorno."
+    : `${wrong} ${wrong === 1 ? "errore" : "errori"}. Le parole sbagliate sono segnate per il ripasso.`;
+}
+
+/* ---------------------------------------------------------------------
+   Toni
+   Una parola di una sola sillaba ha un tono non ambiguo: su una parola di
+   due sillabe l'audio non direbbe quale delle due va riconosciuta.
+   --------------------------------------------------------------------- */
+
+/** Contorni dei quattro toni, disegnati nella stessa scatola. */
+const TONE_PATHS = {
+  1: "M4 12 L38 12",
+  2: "M6 19 C14 19 22 12 36 5",
+  3: "M4 11 C12 24 24 24 36 8",
+  4: "M5 4 L36 20",
+};
+
+const TONE_LABELS = { 1: "piatto", 2: "alto", 3: "discendente-ascendente", 4: "discendente" };
+
+/**
+ * Parole mono-sillaba con tono 1-4. Il tono si legge dal pinyin numerico,
+ * che è l'unica trascrizione senza ambiguità sui diacritici.
+ */
+function tonePool() {
+  const out = [];
+  for (const i of deckIndices()) {
+    const w = state.words[i];
+    if (w[F.simp].length !== 1) continue;
+    const parts = String(w[F.numeric]).trim().split(/\s+/);
+    if (parts.length !== 1) continue;
+    const m = parts[0].match(/([1-5])$/);
+    if (!m) continue;
+    const tone = Number(m[1]);
+    if (tone < 1 || tone > 4) continue;  // il tono neutro resta fuori
+    out.push({ index: i, tone });
+  }
+  return out;
+}
+
+function startTones() {
+  const pool = tonePool();
+  const s = session.toni;
+
+  s.items = shuffle(pool.slice()).slice(0, TONE_LENGTH);
+  s.pos = 0;
+  s.ok = 0;
+  s.locked = false;
+  s.running = true;
+
+  $("#tone-done").hidden = true;
+  $("#tone-body").hidden = false;
+
+  if (s.items.length === 0) {
+    // nessuna parola mono-sillaba nei livelli scelti
+    $("#tone-body").hidden = true;
+    $("#tone-done").hidden = false;
+    $("#tone-score").textContent = "—";
+    $("#tone-done-text").textContent =
+      "Nessuna parola di una sola sillaba nei livelli selezionati. Scegli un livello più basso o più livelli insieme.";
+    return;
+  }
+  renderTone();
+}
+
+function renderTone() {
+  const s = session.toni;
+  if (!s.running) return;
+  if (s.pos >= s.items.length) { finishTones(); return; }
+
+  const item = s.items[s.pos];
+  const word = state.words[item.index];
+
+  $("#tone-hanzi").textContent = word[F.simp];
+
+  const grid = $("#tone-grid");
+  grid.innerHTML = "";
+  for (const tone of [1, 2, 3, 4]) {
+    const btn = document.createElement("button");
+    btn.className = "tone-btn";
+    btn.dataset.tone = String(tone);
+    btn.setAttribute("aria-label", `Tono ${tone}, ${TONE_LABELS[tone]}`);
+    btn.innerHTML =
+      `<svg viewBox="0 0 42 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" aria-hidden="true">
+         <path d="${TONE_PATHS[tone]}"/>
+       </svg>
+       <span class="tone-btn__n"><b>${tone}</b>°</span>`;
+    btn.addEventListener("click", () => answerTone(tone));
+    grid.appendChild(btn);
+  }
+
+  $("#tone-feedback").textContent = "";
+  $("#tone-feedback").className = "feedback";
+
+  $("#tone-count").innerHTML = `<strong>${s.pos}</strong> / ${s.items.length}`;
+  $("#tone-progress").style.width = `${(s.pos / s.items.length) * 100}%`;
+
+  setTimeout(() => speak(word[F.simp]), 250);
+}
+
+function answerTone(tone) {
+  const s = session.toni;
+  if (s.locked || !s.running) return;
+  s.locked = true;
+
+  const item = s.items[s.pos];
+  const word = state.words[item.index];
+  const isRight = tone === item.tone;
+
+  $$("#tone-grid .tone-btn").forEach(btn => {
+    const t = Number(btn.dataset.tone);
+    btn.disabled = true;
+    if (t === item.tone) btn.classList.add("is-correct");
+    else if (t === tone) btn.classList.add("is-wrong");
+    else btn.classList.add("is-faded");
+  });
+
+  // statistiche per tono, indipendenti dalla parola
+  const stats = state.progress.toneStats[item.tone] ||
+                (state.progress.toneStats[item.tone] = { ok: 0, err: 0 });
+  if (isRight) stats.ok += 1; else stats.err += 1;
+
+  if (isRight) s.ok += 1;
+  recordAnswer(item.index, isRight);
+
+  const feedback = $("#tone-feedback");
+  feedback.innerHTML = isRight
+    ? `Giusto — <strong>${word[F.pinyin]}</strong>`
+    : `Era il tono <strong>${item.tone}°</strong> — <span class="hanzi">${word[F.simp]}</span> <strong>${word[F.pinyin]}</strong>`;
+
+  setTimeout(() => {
+    s.pos += 1;
+    s.locked = false;
+    renderTone();
+  }, isRight ? 800 : 1600);
+}
+
+function finishTones() {
+  const s = session.toni;
+  s.running = false;
+  $("#tone-body").hidden = true;
+  $("#tone-done").hidden = false;
+  $("#tone-progress").style.width = "100%";
+  $("#tone-count").innerHTML = `<strong>${s.items.length}</strong> / ${s.items.length}`;
+  $("#tone-score").textContent = `${s.ok}/${s.items.length}`;
+
+  const wrong = s.items.length - s.ok;
+  $("#tone-done-text").textContent = wrong === 0
+    ? "Tutti i toni riconosciuti."
+    : `${wrong} ${wrong === 1 ? "tono sbagliato" : "toni sbagliati"}. Riascolta la sillaba più volte prima di rispondere.`;
+}
+
+/* ---------------------------------------------------------------------
+   Registrazione comune di una risposta (quiz, toni, esame)
+   --------------------------------------------------------------------- */
+
+function recordAnswer(index, isRight) {
+  const stats = todayStats();
+  if (isRight) stats.correct += 1;
+  else {
+    stats.wrong += 1;
+    const m = state.progress.mistakes;
+    m[index] = (m[index] || 0) + 1;
+  }
+  saveProgress();
+}
+
+/** Icona altoparlante condivisa, per non duplicare l'SVG in tre punti. */
+function audioIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M11 5 6 9H3v6h3l5 4V5Z"/>
+            <path d="M15.5 8.5a5 5 0 0 1 0 7"/>
+            <path d="M18.5 5.5a9 9 0 0 1 0 13"/>
+          </svg>`;
+}
+
+/**
+ * Scrittura: ordine dei tratti con Hanzi Writer.
+ *
+ * La libreria arriva da CDN solo quando si apre questa scheda (30 kB non
+ * devono pesare su chi studia solo le carte). I dati di ogni carattere
+ * vengono messi in IndexedDB: dopo il primo disegno, la scrittura funziona
+ * anche senza rete.
+ */
+
+const HANZI_WRITER_CDN = "https://cdn.jsdelivr.net/npm/hanzi-writer@3.7.3/dist/hanzi-writer.min.js";
+const HANZI_DATA_CDN   = "https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/";
+
+let hanziWriterPromise = null;
+
+function loadHanziWriter() {
+  if (window.HanziWriter) return Promise.resolve(window.HanziWriter);
+  if (hanziWriterPromise) return hanziWriterPromise;
+
+  hanziWriterPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = HANZI_WRITER_CDN;
+    script.async = true;
+    script.onload = () => window.HanziWriter
+      ? resolve(window.HanziWriter)
+      : reject(new Error("HanziWriter non disponibile"));
+    script.onerror = () => reject(new Error("CDN non raggiungibile"));
+    document.head.appendChild(script);
+  }).catch(err => {
+    hanziWriterPromise = null; // la prossima apertura riprova
+    throw err;
+  });
+
+  return hanziWriterPromise;
+}
+
+/**
+ * Caricatore dei dati dei tratti con cache.
+ * HanziWriter lo chiama per ogni carattere: senza cache lo stesso JSON
+ * verrebbe riscaricato a ogni parola.
+ */
+function strokeLoader(char, onLoad, onError) {
+  const key = "stroke:" + char;
+
+  Promise.race([
+    idbGetFrom(IDB_STROKES, key).catch(() => null),
+    delay(IDB_WAIT),
+  ])
+    .then(cached => {
+      if (cached) return cached;
+      return fetch(HANZI_DATA_CDN + encodeURIComponent(char) + ".json")
+        .then(res => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.json();
+        })
+        .then(data => {
+          idbSetIn(IDB_STROKES, key, data).catch(() => {});
+          return data;
+        });
+    })
+    .then(onLoad, onError);
+}
+
+/** Stato della schermata di scrittura, separato dai progressi persistenti. */
+const writeState = {
+  index: null,   // indice della parola in state.words
+  char: 0,       // carattere selezionato dentro la parola
+  writer: null,  // istanza HanziWriter corrente
+  ready: false,  // la libreria è stata caricata
+  busy: false,   // animazione in corso
+  token: 0,      // invalida i callback di un'animazione superata
+  watchdog: 0,   // sblocca i pulsanti se onComplete non arriva
+};
+
+/** Sceglie una parola: prima le più sbagliate, poi quelle in studio. */
+function pickWriteWord() {
+  const mistakes = state.progress.mistakes;
+  const pool = pickStudyPool(30);
+  const others = pool.filter(i => i !== writeState.index);
+  const source = others.length ? others : (pool.length ? pool : deckIndices());
+  if (!source.length) return null;
+
+  // un errore recente rende la parola più probabile, ma non la impone:
+  // scrivere sempre la stessa parola è punizione, non esercizio
+  source.sort((a, b) => (mistakes[b] || 0) - (mistakes[a] || 0));
+  const top = source.slice(0, Math.min(8, source.length));
+  return top[Math.floor(Math.random() * top.length)];
+}
+
+function currentWriteChar() {
+  if (writeState.index === null) return null;
+  const chars = Array.from(state.words[writeState.index][F.simp]);
+  return chars[writeState.char] || chars[0] || null;
+}
+
+function enterWrite() {
+  if (writeState.index === null) {
+    writeState.index = pickWriteWord();
+    writeState.char = 0;
+  }
+
+  if (writeState.index === null) {
+    showWriteFallback();
+    return;
+  }
+
+  if (!writeState.ready) {
+    renderWriteWord(); // mostra subito pinyin e significato
+    loadHanziWriter()
+      .then(() => {
+        writeState.ready = true;
+        $("#write-fallback").hidden = true;
+        $("#write-body").hidden = false;
+        renderWriter();
+      })
+      .catch(err => showWriteFallback(err));
+    return;
+  }
+
+  $("#write-fallback").hidden = true;
+  $("#write-body").hidden = false;
+  renderWriteWord();
+}
+
+function showWriteFallback(error) {
+  $("#write-body").hidden = true;
+  $("#write-fallback").hidden = false;
+  if (error) console.warn("Scrittura non disponibile:", error);
+}
+
+function renderWriteWord() {
+  if (writeState.index === null) return;
+  const word = state.words[writeState.index];
+
+  $("#write-pinyin").textContent = word[F.pinyin];
+  $("#write-meaning").textContent = word[F.meaning];
+  setWriteHint("Tocca «Guarda» per vedere l’ordine dei tratti.");
+
+  const chars = Array.from(word[F.simp]);
+  const box = $("#write-chars");
+  box.innerHTML = "";
+  chars.forEach((ch, k) => {
+    const btn = document.createElement("button");
+    btn.className = "char-chip hanzi";
+    btn.type = "button";
+    btn.textContent = ch;
+    btn.setAttribute("aria-pressed", String(k === writeState.char));
+    btn.setAttribute("aria-label", `Carattere ${k + 1} di ${chars.length}: ${ch}`);
+    btn.addEventListener("click", () => {
+      if (writeState.char === k) return;
+      writeState.char = k;
+      renderWriteWord();
+      renderWriter();
+    });
+    box.appendChild(btn);
+  });
+
+  // una parola di un solo carattere non ha bisogno di chip: la fila
+  // sembrerebbe un selettore senza alternative
+  box.hidden = chars.length < 2;
+
+  if (writeState.ready) renderWriter();
+}
+
+function renderWriter() {
+  const ch = currentWriteChar();
+  if (!ch || !writeState.ready) return;
+
+  // un writer nuovo invalida l'animazione precedente
+  writeState.token += 1;
+  clearTimeout(writeState.watchdog);
+  writeState.busy = false;
+
+  const box = $("#write-grid").getBoundingClientRect();
+  const target = $("#write-canvas");
+  // il canvas sta dentro il bordo: uso la sua larghezza, non quella esterna
+  const size = Math.max(160, Math.round(target.clientWidth || box.width));
+
+  const css = getComputedStyle(document.documentElement);
+  const ink  = css.getPropertyValue("--ink").trim();
+  const outline = css.getPropertyValue("--outline").trim();
+  const seal = css.getPropertyValue("--seal").trim();
+
+  target.innerHTML = ""; // il vecchio SVG non ha un destroy(): lo sostituisco
+
+  writeState.writer = HanziWriter.create(target, ch, {
+    width: size,
+    height: size,
+    padding: Math.round(size * 0.05),
+    showOutline: true,
+    showCharacter: false,
+    strokeColor: ink,
+    outlineColor: outline,
+    highlightColor: seal,
+    drawingColor: ink,
+    drawingWidth: Math.max(4, Math.round(size / 56)),
+    highlightOnError: true,
+    showHintAfterMisses: 3,
+    charDataLoader: strokeLoader,
+    onLoadCharDataError: err => showWriteFallback(err),
+  });
+}
+
+function setWriteHint(html) {
+  $("#write-hint").innerHTML = html;
+}
+
+function animateWriteChar() {
+  if (!writeState.writer || writeState.busy) return;
+  writeState.writer.cancelQuiz(); // animazione e quiz non convivono
+  writeState.busy = true;
+  setWriteHint("Segui l’ordine dei tratti.");
+
+  const token = ++writeState.token;
+  const done = () => {
+    if (token !== writeState.token) return;
+    writeState.busy = false;
+    clearTimeout(writeState.watchdog);
+    setWriteHint("Ora tocca a te: «Scrivi tu», oppure passa alla prossima parola.");
+  };
+
+  writeState.writer.animateCharacter({ onComplete: done });
+
+  // se la scheda va in background i frame si fermano e onComplete può non
+  // arrivare: dopo 20 s libero comunque i pulsanti
+  clearTimeout(writeState.watchdog);
+  writeState.watchdog = setTimeout(done, 20000);
+}
+
+function practiceWriteChar() {
+  if (!writeState.writer || writeState.busy) return;
+  const writer = writeState.writer;
+  writer.cancelQuiz();
+  writeState.busy = true;
+  setWriteHint("Traccia dall’alto verso il basso, tratto per tratto.");
+
+  writer.quiz({
+    onComplete: ({ totalMistakes }) => {
+      writeState.busy = false;
+      setWriteHint(totalMistakes === 0
+        ? "<strong>Prima</strong> — nessun tratto fuori posto."
+        : `Fatto — ${totalMistakes} ${totalMistakes === 1 ? "tratto" : "tratti"} da rivedere.`);
+    },
+  });
+}
+
+function nextWriteWord() {
+  const next = pickWriteWord();
+  if (next === null) {
+    toast("Nessuna parola nei livelli selezionati.");
+    return;
+  }
+  if (writeState.writer) writeState.writer.cancelQuiz();
+  writeState.index = next;
+  writeState.char = 0;
+  writeState.busy = false;
+  renderWriteWord();
+  renderWriter();
+}
+
+/* ---------------------------------------------------------------------
+   Esame: 20 domande in 15 minuti, senza correzione durante la prova.
+   Il timer è calcolato sulla scadenza, non decrementato: se il telefono
+   sospende la scheda, al ritorno il tempo resta giusto.
+   --------------------------------------------------------------------- */
+
+const EXAM_LENGTH = 20;
+const EXAM_SECONDS = 15 * 60;
+
+const examState = {
+  items: [],
+  answers: [],
+  pos: 0,
+  running: false,
+  done: false,
+  locked: false,
+  startedAt: 0,
+  deadline: 0,
+  timer: null,
+};
+
+function buildExamItems() {
+  const deck = shuffle(deckIndices().slice()).slice(0, EXAM_LENGTH);
+  return deck.map((idx, k) => {
+    const variant = QUIZ_VARIANTS[k % QUIZ_VARIANTS.length].id;
+    const textOf = variant === "h2m"
+      ? shortMeaning
+      : (i => state.words[i][F.simp]);
+    return {
+      idx,
+      variant,
+      choices: shuffle([idx, ...pickDistractors(idx, textOf)]),
+    };
+  }).filter(item => item.choices.length === 4);
+}
+
+function showExamIntro() {
+  $("#exam-intro").hidden = false;
+  $("#exam-body").hidden = true;
+  $("#exam-done").hidden = true;
+
+  const best = state.progress.exams && state.progress.exams.best;
+  $("#exam-fact-best").textContent = Number.isFinite(best) ? `${best}/${EXAM_LENGTH}` : "—";
+  $("#exam-fact-count").textContent = String(EXAM_LENGTH);
+}
+
+function enterExam() {
+  if (examState.running || examState.done) return;
+  showExamIntro();
+}
+
+function startExam() {
+  examState.items = buildExamItems();
+  if (examState.items.length < 4) {
+    toast("Servono più parole nei livelli selezionati.");
+    return;
+  }
+
+  examState.answers = new Array(examState.items.length).fill(null);
+  examState.pos = 0;
+  examState.running = true;
+  examState.done = false;
+  examState.locked = false;
+  examState.startedAt = Date.now();
+  examState.deadline = examState.startedAt + EXAM_SECONDS * 1000;
+
+  $("#exam-intro").hidden = true;
+  $("#exam-done").hidden = true;
+  $("#exam-body").hidden = false;
+
+  renderExamQuestion();
+  startExamTimer();
+}
+
+function startExamTimer() {
+  clearInterval(examState.timer);
+
+  const tick = () => {
+    if (!examState.running) return;
+    const left = Math.max(0, Math.ceil((examState.deadline - Date.now()) / 1000));
+    const el = $("#exam-timer");
+    el.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+    el.classList.toggle("is-urgent", left <= 60);
+    if (left <= 0) finishExam(true);
+  };
+
+  tick();
+  examState.timer = setInterval(tick, 500);
+}
+
+function renderExamQuestion() {
+  if (!examState.running) return;
+  if (examState.pos >= examState.items.length) { finishExam(false); return; }
+
+  const pos = examState.pos;
+  const item = examState.items[pos];
+  const word = state.words[item.idx];
+  const prompt = $("#exam-prompt");
+  const options = $("#exam-options");
+
+  const textOf = item.variant === "h2m"
+    ? shortMeaning
+    : (i => state.words[i][F.simp]);
+
+  prompt.innerHTML = "";
+  options.innerHTML = "";
+
+  if (item.variant === "h2m") {
+    const p = document.createElement("p");
+    p.className = "hanzi quiz__prompt-hanzi";
+    p.textContent = word[F.simp];
+    prompt.appendChild(p);
+  } else if (item.variant === "m2h") {
+    const p = document.createElement("p");
+    p.className = "quiz__prompt-text";
+    p.textContent = shortMeaning(item.idx);
+    prompt.appendChild(p);
+  } else {
+    const btn = document.createElement("button");
+    btn.className = "audio-btn audio-btn--lg";
+    btn.type = "button";
+    btn.setAttribute("aria-label", "Riproduci la parola");
+    btn.innerHTML = audioIcon();
+    btn.addEventListener("click", () => speak(word[F.simp], btn));
+    prompt.appendChild(btn);
+
+    const note = document.createElement("span");
+    note.className = "quiz__prompt-note";
+    note.textContent = "Quale parola hai sentito?";
+    prompt.appendChild(note);
+
+    setTimeout(() => {
+      if (examState.running && examState.pos === pos && !examState.locked) {
+        speak(word[F.simp]);
+      }
+    }, 250);
+  }
+
+  item.choices.forEach((choiceIndex, k) => {
+    const btn = document.createElement("button");
+    btn.className = "option";
+    btn.type = "button";
+    btn.dataset.choice = String(choiceIndex);
+
+    const span = document.createElement("span");
+    span.className = "option__text" + (item.variant === "h2m" ? "" : " is-hanzi hanzi");
+    span.textContent = textOf(choiceIndex);
+
+    const key = document.createElement("span");
+    key.className = "option__key";
+    key.textContent = String(k + 1);
+
+    btn.append(span, key);
+    btn.addEventListener("click", () => answerExam(choiceIndex));
+    options.appendChild(btn);
+  });
+
+  $("#exam-count").innerHTML = `<strong>${pos}</strong> / ${examState.items.length}`;
+  $("#exam-progress").style.width = `${(pos / examState.items.length) * 100}%`;
+}
+
+function answerExam(choiceIndex) {
+  if (!examState.running || examState.locked) return;
+  examState.locked = true;
+  examState.answers[examState.pos] = choiceIndex;
+
+  $$("#exam-options .option").forEach(btn => {
+    btn.disabled = true;
+    if (Number(btn.dataset.choice) === choiceIndex) btn.classList.add("is-chosen");
+  });
+
+  // pausa breve solo per confermare il tocco: nessuna correzione durante
+  // l'esame, altrimenti la prova diventerebbe un quiz con il timer
+  setTimeout(() => {
+    examState.pos += 1;
+    examState.locked = false;
+    renderExamQuestion();
+  }, 220);
+}
+
+function finishExam(timedOut) {
+  if (!examState.running) return;
+  examState.running = false;
+  examState.locked = true;
+  examState.done = true;
+  clearInterval(examState.timer);
+
+  const elapsed = Math.min(EXAM_SECONDS, Math.round((Date.now() - examState.startedAt) / 1000));
+  const previous = state.progress.exams || {};
+  const wrong = [];
+  let correct = 0;
+
+  examState.items.forEach((item, k) => {
+    const given = examState.answers[k];
+    const isRight = given === item.idx;
+    if (isRight) correct += 1;
+    else wrong.push({ item, given });
+    recordAnswer(item.idx, isRight);
+  });
+
+  state.progress.exams = {
+    best: Math.max(previous.best || 0, correct),
+    last: correct,
+    taken: (previous.taken || 0) + 1,
+    lastSeconds: elapsed,
+    lastDate: todayISO(),
+  };
+  saveProgress();
+
+  $("#exam-body").hidden = true;
+  $("#exam-done").hidden = false;
+  $("#exam-score").textContent = `${correct}/${examState.items.length}`;
+
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = String(elapsed % 60).padStart(2, "0");
+  const newBest = previous.taken > 0 && correct > (previous.best || 0) ? " · nuovo record" : "";
+
+  $("#exam-summary").textContent = timedOut
+    ? `Tempo scaduto · ${correct} ${correct === 1 ? "corretta" : "corrette"} · ${wrong.length} da rivedere`
+    : `${correct === examState.items.length ? "Nessun errore" : `${wrong.length} ${wrong.length === 1 ? "errore" : "errori"}`} · ${minutes}:${seconds}${newBest}`;
+
+  renderExamReview(wrong);
+  $("#exam-done").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderExamReview(wrong) {
+  const box = $("#exam-review");
+  box.innerHTML = "";
+
+  if (!wrong.length) {
+    const p = document.createElement("p");
+    p.className = "review__title";
+    p.textContent = "Nessuna parola da rivedere.";
+    box.appendChild(p);
+    return;
+  }
+
+  const title = document.createElement("p");
+  title.className = "review__title";
+  title.textContent = `Da rivedere · ${wrong.length}`;
+  box.appendChild(title);
+
+  for (const { item, given } of wrong) {
+    const word = state.words[item.idx];
+
+    const row = document.createElement("div");
+    row.className = "review__item";
+
+    const head = document.createElement("div");
+    head.className = "review__word";
+
+    const hanzi = document.createElement("span");
+    hanzi.className = "hanzi";
+    hanzi.textContent = word[F.simp];
+
+    const pinyin = document.createElement("span");
+    pinyin.className = "review__pinyin";
+    pinyin.textContent = word[F.pinyin];
+
+    head.append(hanzi, pinyin);
+
+    const meaning = document.createElement("p");
+    meaning.className = "review__meaning";
+    meaning.textContent = word[F.meaning];
+
+    const givenEl = document.createElement("p");
+    givenEl.className = "review__given";
+    if (given === null) {
+      givenEl.textContent = "Nessuna risposta";
+    } else {
+      const text = item.variant === "h2m"
+        ? shortMeaning(given)
+        : state.words[given][F.simp];
+      givenEl.append("Hai scelto: ");
+      const s = document.createElement("s");
+      s.textContent = text;
+      givenEl.appendChild(s);
+    }
+
+    row.append(head, meaning, givenEl);
+    box.appendChild(row);
+  }
+}
+
+function abortExam() {
+  if (!examState.running) return;
+  examState.running = false;
+  examState.locked = true;
+  clearInterval(examState.timer);
+  showExamIntro();
+}
+
+/* ---------------------------------------------------------------------
+   Progressi: la dashboard legge quello che le altre modalità scrivono.
+   Tutti i conteggi sono limitati ai livelli attivi, così il pannello
+   racconta il mazzo che si sta davvero studiando.
+   --------------------------------------------------------------------- */
+
+function deckStatusCounts() {
+  const deck = deckIndices();
+  let fresh = 0;
+  let learning = 0;
+  let review = 0;
+
+  for (const i of deck) {
+    const card = state.progress.cards[i];
+    if (!card || !card.seen) fresh++;
+    else if (card.s === "review") review++;
+    else learning++;
+  }
+
+  return { total: deck.length, fresh, learning, review };
+}
+
+/** Ultimi sette giorni, dal più vecchio a oggi. */
+function lastSevenDays() {
+  const out = [];
+
+  for (let offset = 6; offset >= 0; offset--) {
+    const iso = todayISO(-offset);
+    const stats = state.progress.days[iso] || {};
+    const date = new Date();
+    date.setDate(date.getDate() - offset);
+
+    out.push({
+      iso,
+      count: (stats.introduced || 0) + (stats.reviewed || 0),
+      isToday: offset === 0,
+      short: date.toLocaleDateString("it-IT", { weekday: "short" }),
+      long: date.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" }),
+    });
+  }
+
+  return out;
+}
+
+/** Parole sbagliate nei livelli attivi, dalla più sbagliata. */
+function mistakeEntries() {
+  const deck = new Set(deckIndices());
+  return Object.entries(state.progress.mistakes)
+    .map(([key, count]) => ({ index: Number(key), count: Number(count) }))
+    .filter(m => Number.isInteger(m.index) && m.count > 0 && deck.has(m.index))
+    .sort((a, b) => b.count - a.count || a.index - b.index);
+}
+
+function renderDashboard() {
+  if (!state.words.length) return;
+
+  /* --- serie --- */
+  const streak = computeStreak();
+  const today = state.progress.days[todayISO()] || {};
+  const studiedToday = (today.introduced || 0) + (today.reviewed || 0) > 0;
+
+  $("#streak-value").textContent = String(streak);
+  $("#streak-label").textContent = streak === 1 ? "giorno di fila" : "giorni di fila";
+  $("#streak-note").textContent =
+    streak === 0
+      ? "Una carta oggi basta per cominciare la serie."
+      : studiedToday
+        ? "Serie aggiornata: torna domani per non interromperla."
+        : "Oggi non hai ancora studiato: la serie resta valida fino a mezzanotte.";
+
+  /* --- numeri di oggi --- */
+  const introduced = today.introduced || 0;
+  const reviewed = today.reviewed || 0;
+  const correct = today.correct || 0;
+  const wrong = today.wrong || 0;
+  const answers = correct + wrong;
+
+  $("#today-total").textContent = String(introduced + reviewed);
+  $("#today-new").textContent = String(introduced);
+  $("#today-review").textContent = String(reviewed);
+  $("#today-accuracy").textContent = answers
+    ? `${Math.round((correct / answers) * 100)}%`
+    : "—";
+
+  /* --- parole per stato --- */
+  const status = deckStatusCounts();
+  $("#status-total").textContent = `${status.total} ${status.total === 1 ? "parola" : "parole"}`;
+  $("#status-new").textContent = String(status.fresh);
+  $("#status-learning").textContent = String(status.learning);
+  $("#status-review").textContent = String(status.review);
+
+  const bar = $("#status-bar");
+  bar.innerHTML = "";
+  const segments = [
+    ["new", status.fresh, "nuove"],
+    ["learning", status.learning, "in apprendimento"],
+    ["review", status.review, "consolidate"],
+  ];
+  for (const [kind, count, label] of segments) {
+    if (!count || !status.total) continue;
+    const seg = document.createElement("span");
+    seg.className = `stack__seg stack__seg--${kind}`;
+    seg.style.width = `${(count / status.total) * 100}%`;
+    seg.title = `${count} ${label}`;
+    bar.appendChild(seg);
+  }
+  bar.setAttribute(
+    "aria-label",
+    status.total
+      ? `Parole: ${status.fresh} nuove, ${status.learning} in apprendimento, ${status.review} consolidate`
+      : "Nessuna parola nei livelli attivi"
+  );
+
+  /* --- ultimi sette giorni --- */
+  const week = lastSevenDays();
+  const max = Math.max(1, ...week.map(d => d.count));
+  const total = week.reduce((sum, d) => sum + d.count, 0);
+  $("#week-total").textContent = `${total} ${total === 1 ? "carta" : "carte"}`;
+
+  const chart = $("#week-chart");
+  chart.innerHTML = "";
+  week.forEach(day => {
+    const col = document.createElement("div");
+    col.className = "week__col" + (day.isToday ? " week__col--today" : "");
+    col.setAttribute("role", "img");
+    col.setAttribute("aria-label", `${day.long}: ${day.count} ${day.count === 1 ? "carta" : "carte"}`);
+
+    const value = document.createElement("span");
+    value.className = "week__value";
+    value.textContent = String(day.count);
+
+    const track = document.createElement("span");
+    track.className = "week__track";
+
+    const barEl = document.createElement("span");
+    barEl.className = "week__bar" + (day.count ? "" : " week__bar--zero");
+    // le barre a zero restano invisibili: il numero sopra dice già che
+    // quel giorno non si è studiato
+    barEl.style.height = day.count ? `${Math.max(6, (day.count / max) * 100)}%` : "0";
+    track.appendChild(barEl);
+
+    const label = document.createElement("span");
+    label.className = "week__day";
+    label.textContent = day.isToday ? "oggi" : day.short;
+
+    col.append(value, track, label);
+    chart.appendChild(col);
+  });
+
+  /* --- parole più sbagliate --- */
+  const allMistakes = mistakeEntries();
+  $("#mistakes-total").textContent = allMistakes.length
+    ? `${allMistakes.length} ${allMistakes.length === 1 ? "parola" : "parole"}`
+    : "";
+  $("#mistakes-empty").hidden = allMistakes.length > 0;
+
+  const list = $("#mistake-list");
+  list.innerHTML = "";
+  for (const entry of allMistakes.slice(0, 5)) {
+    const word = state.words[entry.index];
+
+    const li = document.createElement("li");
+    li.className = "mistake";
+
+    const body = document.createElement("div");
+    const head = document.createElement("div");
+    head.className = "mistake__head";
+
+    const hanzi = document.createElement("span");
+    hanzi.className = "hanzi mistake__hanzi";
+    hanzi.textContent = word[F.simp];
+
+    const pinyin = document.createElement("span");
+    pinyin.className = "mistake__pinyin";
+    pinyin.textContent = word[F.pinyin];
+
+    const meaning = document.createElement("p");
+    meaning.className = "mistake__meaning";
+    meaning.textContent = word[F.meaning];
+
+    head.append(hanzi, pinyin);
+    body.append(head, meaning);
+
+    const count = document.createElement("span");
+    count.className = "mistake__count";
+    count.textContent = `×${entry.count}`;
+    count.setAttribute("aria-label", `${entry.count} ${entry.count === 1 ? "errore" : "errori"}`);
+
+    const audio = document.createElement("button");
+    audio.className = "audio-btn";
+    audio.type = "button";
+    audio.setAttribute("aria-label", `Ascolta ${word[F.simp]}`);
+    audio.innerHTML = audioIcon();
+    audio.addEventListener("click", () => speak(word[F.simp], audio));
+
+    li.append(body, count, audio);
+    list.appendChild(li);
+  }
+
+  /* --- esame --- */
+  const exams = state.progress.exams || {};
+  const taken = Number(exams.taken) || 0;
+  $("#exam-taken").textContent = taken
+    ? `${taken} ${taken === 1 ? "prova" : "prove"}`
+    : "nessuna prova";
+  $("#dash-exam-best").textContent = Number.isFinite(exams.best) ? `${exams.best}/${EXAM_LENGTH}` : "—";
+  $("#dash-exam-last").textContent = Number.isFinite(exams.last) ? `${exams.last}/${EXAM_LENGTH}` : "—";
+
+  if (Number.isFinite(exams.lastSeconds)) {
+    const minutes = Math.floor(exams.lastSeconds / 60);
+    const seconds = String(exams.lastSeconds % 60).padStart(2, "0");
+    $("#dash-exam-time").textContent = `${minutes}:${seconds}`;
+  } else {
+    $("#dash-exam-time").textContent = "—";
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Backup: JSON completo, CSV per Anki, import con conferma.
+   L'import sostituisce i progressi: per questo non parte al primo tocco,
+   ma dopo una schermata di conferma che dice cosa c'è nel file.
+   --------------------------------------------------------------------- */
+
+let pendingImport = null;
+
+function downloadFile(name, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Safari ha bisogno che l'URL sopravviva al click
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function exportProgressJSON() {
+  const payload = {
+    app: "zige",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    progress: state.progress,
+  };
+  downloadFile(
+    `zige-progressi-${todayISO()}.json`,
+    JSON.stringify(payload, null, 2),
+    "application/json"
+  );
+  toast("Backup JSON scaricato");
+}
+
+/** Una cella CSV: virgolette solo quando servono, doppie raddoppiate. */
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function exportAnkiCSV() {
+  const set = state.progress.set;
+  const levelIndex = set === "hsk3" ? F.hsk3 : F.hsk2;
+  const prefix = set === "hsk3" ? "HSK3" : "HSK2";
+  const rows = [];
+
+  for (let i = 0; i < state.words.length; i++) {
+    const card = state.progress.cards[i];
+    if (!card || !card.seen) continue;
+
+    const word = state.words[i];
+    const lv = word[levelIndex];
+    if (lv === null) continue;
+
+    rows.push({
+      lv,
+      front: word[F.simp],
+      back: `${word[F.pinyin]} · ${word[F.meaning]}`,
+      tag: `${prefix}_L${formatLevel(lv).replace("–", "-")}`,
+    });
+  }
+
+  if (!rows.length) {
+    toast("Nessuna parola studiata da esportare.");
+    return;
+  }
+
+  rows.sort((a, b) => a.lv - b.lv);
+  const lines = rows.map(r => [r.front, r.back, r.tag].map(csvCell).join(","));
+  downloadFile(
+    `zige-anki-${set}-${todayISO()}.csv`,
+    lines.join("\n") + "\n",
+    "text/csv;charset=utf-8"
+  );
+  toast(`${rows.length} parole esportate per Anki`);
+}
+
+/** Controllo minimo: un JSON qualsiasi non deve poter cancellare i progressi. */
+function isImportable(data) {
+  return !!data
+    && typeof data === "object"
+    && (data.set === "hsk2" || data.set === "hsk3")
+    && Array.isArray(data.levels)
+    && data.levels.length > 0
+    && data.cards && typeof data.cards === "object" && !Array.isArray(data.cards)
+    && data.days && typeof data.days === "object" && !Array.isArray(data.days);
+}
+
+function readFileText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
+async function handleImportFile(file) {
+  if (!file) return;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(await readFileText(file));
+  } catch (e) {
+    toast("Il file non è un JSON valido.");
+    $("#import-file").value = "";
+    return;
+  }
+
+  // accetto sia il wrapper completo sia un backup senza intestazione
+  const data = parsed && typeof parsed === "object" && parsed.progress ? parsed.progress : parsed;
+  if (!isImportable(data)) {
+    toast("Il file non è un backup di Zìgé.");
+    $("#import-file").value = "";
+    return;
+  }
+
+  pendingImport = data;
+
+  const cards = Object.keys(data.cards || {}).length;
+  const days = Object.keys(data.days || {}).length;
+  const mistakes = Object.keys(data.mistakes || {}).length;
+  const exams = Number(data.exams && data.exams.taken) || 0;
+
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  $("#import-summary").textContent =
+    `${file.name}: ${plural(cards, "carta", "carte")}, ` +
+    `${plural(days, "giorno di studio", "giorni di studio")}, ` +
+    `${plural(mistakes, "parola da rivedere", "parole da rivedere")}` +
+    `${exams ? `, ${plural(exams, "esame", "esami")}` : ""}. ` +
+    "Sostituire i progressi attuali? L'operazione non si può annullare.";
+  $("#import-confirm").hidden = false;
+  $("#import-apply").focus();
+}
+
+function cancelImport() {
+  pendingImport = null;
+  $("#import-confirm").hidden = true;
+  $("#import-file").value = "";
+}
+
+function applyImport() {
+  if (!pendingImport) return;
+
+  state.progress = normalizeProgress(pendingImport);
+  pendingImport = null;
+  cancelImport();
+  saveProgress();
+
+  // le sessioni in corso appartengono al vecchio mazzo
+  writeState.index = null;
+  writeState.char = 0;
+  writeState.busy = false;
+  clearTimeout(writeState.watchdog);
+  examState.done = false;
+  if (examState.running) abortExam();
+
+  $("#new-output").textContent = state.progress.dailyNew;
+  $$("#set-picker button").forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.set === state.progress.set))
+  );
+
+  renderLevelPicker();
+  renderLevelSummary();
+  buildQueue();
+  renderCard();
+  renderDashboard();
+
+  const streak = computeStreak();
+  document.title = streak > 0 ? `${streak} · Zìgé · vocabolario HSK` : "Zìgé · vocabolario HSK";
+
+  toast("Progressi importati");
+}
+
+function bindDataActions() {
+  $("#export-json").addEventListener("click", exportProgressJSON);
+  $("#export-csv").addEventListener("click", exportAnkiCSV);
+  $("#import-json").addEventListener("click", () => $("#import-file").click());
+  $("#import-file").addEventListener("change", e => {
+    const file = e.target.files && e.target.files[0];
+    if (file) handleImportFile(file);
+  });
+  $("#import-apply").addEventListener("click", applyImport);
+  $("#import-cancel").addEventListener("click", cancelImport);
+}
+
+/* ---------------------------------------------------------------------
+   Impostazioni
+   --------------------------------------------------------------------- */
+
+function renderLevelPicker() {
+  const set = state.progress.set;
+  const idx = set === "hsk3" ? F.hsk3 : F.hsk2;
+  // le etichette: il HSK 3.0 raggruppa 7-9 in un'unica fascia
+  const labels = set === "hsk3" ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5, 6];
+
+  const counts = new Map();
+  for (const w of state.words) {
+    const lv = w[idx];
+    if (lv !== null) counts.set(lv, (counts.get(lv) || 0) + 1);
+  }
+
+  const box = $("#level-picker");
+  box.innerHTML = "";
+  for (const lv of labels) {
+    const on = state.progress.levels.includes(lv);
+    const btn = document.createElement("button");
+    btn.className = "level-chip";
+    btn.setAttribute("aria-pressed", String(on));
+    btn.innerHTML =
+      `<span class="level-chip__n">${formatLevel(lv)}</span>` +
+      `<span class="level-chip__size">${counts.get(lv) || 0}</span>`;
+    btn.addEventListener("click", () => toggleLevel(lv));
+    box.appendChild(btn);
+  }
+}
+
+function toggleLevel(lv) {
+  const levels = state.progress.levels;
+  const pos = levels.indexOf(lv);
+  if (pos >= 0) {
+    if (levels.length === 1) { toast("Deve restare selezionato almeno un livello"); return; }
+    levels.splice(pos, 1);
+  } else {
+    levels.push(lv);
+    levels.sort((a, b) => a - b);
+  }
+  afterSettingsChange();
+}
+
+function afterSettingsChange() {
+  saveProgress();
+  renderLevelPicker();
+  renderLevelSummary();
+  buildQueue();
+  renderCard();
+  // la dashboard è aperta dietro il foglio impostazioni: i conteggi
+  // devono seguire subito il cambio di livelli
+  if (currentView === "dashboard") renderDashboard();
+}
+
+function renderLevelSummary() {
+  const { set, levels } = state.progress;
+  const sorted = [...levels].sort((a, b) => a - b);
+  const head = sorted[0];
+  const tail = sorted[sorted.length - 1];
+  const span = sorted.length === 1 ? formatLevel(head) : `${formatLevel(head)}–${formatLevel(tail)}`;
+  $("#level-summary").textContent = `HSK ${set === "hsk3" ? "3.0" : "2.0"} · ${span}`;
+}
+
+function openSettings() { $("#settings").hidden = false; $("#close-settings").focus(); }
+function closeSettings() { $("#settings").hidden = true; $("#open-settings").focus(); }
+
+/* ---------------------------------------------------------------------
+   Tema chiaro/scuro
+   --------------------------------------------------------------------- */
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem(THEME_KEY, theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", theme === "dark" ? "#0E1413" : "#F0F1EE");
+  const btn = $("#theme-toggle");
+  btn.setAttribute("aria-label", theme === "dark" ? "Passa al tema chiaro" : "Passa al tema scuro");
+}
+
+function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  const prefers = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  applyTheme(saved || (prefers ? "dark" : "light"));
+}
+
+/* ---------------------------------------------------------------------
+   Navigazione tra le modalità
+   --------------------------------------------------------------------- */
+
+const VIEWS = ["flashcard", "quiz", "toni", "write", "exam", "dashboard"];
+
+let currentView = "flashcard";
+
+function showView(name) {
+  // uscire dall'esame mentre il timer corre lo annulla: non ha senso
+  // lasciare una prova a scadere in sottofondo
+  if (currentView === "exam" && name !== "exam") abortExam();
+
+  for (const v of VIEWS) {
+    $(`#view-${v}`).hidden = v !== name;
+  }
+  $$(".rail__btn").forEach(btn => {
+    if (btn.dataset.view === name) btn.setAttribute("aria-current", "page");
+    else btn.removeAttribute("aria-current");
+  });
+
+  currentView = name;
+
+  // le sessioni partono all'ingresso, non prima: nessun audio a sorpresa
+  // mentre si è ancora sulle carte
+  if (name === "quiz") startQuiz();
+  if (name === "toni") startTones();
+  if (name === "write") enterWrite();
+  if (name === "exam") enterExam();
+  if (name === "dashboard") renderDashboard();
+  else cancelImport();
+}
+
+/* ---------------------------------------------------------------------
+   Collegamenti agli eventi
+   --------------------------------------------------------------------- */
+
+function bindEvents() {
+  $("#drill").addEventListener("click", flipCard);
+
+  $$("#grades .grade").forEach(btn =>
+    btn.addEventListener("click", () => handleGrade(Number(btn.dataset.q)))
+  );
+
+  $("#card-audio").addEventListener("click", e => {
+    const index = currentCardIndex();
+    if (index !== null) speak(state.words[index][F.pinyin], e.currentTarget);
+  });
+
+  $$(".rail__btn").forEach(btn =>
+    btn.addEventListener("click", () => showView(btn.dataset.view))
+  );
+
+  $("#open-settings").addEventListener("click", openSettings);
+  $("#empty-settings").addEventListener("click", openSettings);
+  $("#close-settings").addEventListener("click", closeSettings);
+  $("#settings").addEventListener("click", e => {
+    if (e.target.id === "settings") closeSettings();
+  });
+
+  $$("#set-picker button").forEach(btn =>
+    btn.addEventListener("click", () => {
+      state.progress.set = btn.dataset.set;
+      // i livelli validi cambiano tra i due sillabi: ricomincio da 1..4
+      state.progress.levels = [1, 2, 3, 4];
+      $$("#set-picker button").forEach(b =>
+        b.setAttribute("aria-pressed", String(b === btn))
+      );
+      afterSettingsChange();
+    })
+  );
+
+  $("#new-minus").addEventListener("click", () => adjustDailyNew(-5));
+  $("#new-plus").addEventListener("click",  () => adjustDailyNew(+5));
+
+  // quiz e toni
+  $("#quiz-restart").addEventListener("click", startQuiz);
+  $("#tone-restart").addEventListener("click", startTones);
+  $("#tone-audio").addEventListener("click", e => {
+    const s = session.toni;
+    const item = s.items[s.pos];
+    if (item) speak(state.words[item.index][F.simp], e.currentTarget);
+  });
+
+  // scrittura
+  $("#write-show").addEventListener("click", animateWriteChar);
+  $("#write-practice").addEventListener("click", practiceWriteChar);
+  $("#write-next").addEventListener("click", nextWriteWord);
+  $("#write-retry").addEventListener("click", enterWrite);
+  $("#write-audio").addEventListener("click", e => {
+    if (writeState.index !== null) {
+      speak(state.words[writeState.index][F.simp], e.currentTarget);
+    }
+  });
+
+  // esame
+  $("#exam-start").addEventListener("click", startExam);
+  $("#exam-restart").addEventListener("click", startExam);
+
+  // progressi: export, import, conferma
+  bindDataActions();
+
+  // la griglia è disegnata in pixel: al cambio di larghezza va ricreata
+  let resizeTimer = 0;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (!$("#view-write").hidden && writeState.ready && !writeState.busy) {
+        renderWriter();
+      }
+    }, 180);
+  });
+
+  $("#theme-toggle").addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    applyTheme(next);
+    // i colori dell'SVG sono fissati alla creazione: li riapplico
+    if (!$("#view-write").hidden && writeState.ready && !writeState.busy) {
+      renderWriter();
+    }
+  });
+
+  // scorciatoie da tastiera (desktop)
+  document.addEventListener("keydown", e => {
+    if (!$("#settings").hidden) {
+      if (e.key === "Escape") closeSettings();
+      return;
+    }
+
+    // su cosa è arrivato l'evento: con `document.dispatchEvent` è `document`,
+    // che non ha `closest` — da qui il controllo prima di usarlo.
+    const target = e.target instanceof Element ? e.target : null;
+
+    // mai interceptare la tastiera dentro un campo di testo
+    if (target && target.closest("input, textarea, select, [contenteditable]")) return;
+
+    // se il focus è su un pulsante, la barra spaziatrice o Invio lo
+    // attivano già di per sé: non la raddoppio
+    if (target && target.closest("button, a, [role='button']")) return;
+
+    const digit = ["1", "2", "3", "4"].includes(e.key) ? Number(e.key) : 0;
+
+    // --- carte
+    if (!$("#view-flashcard").hidden) {
+      if (e.code === "Space" || e.key === " ") { e.preventDefault(); flipCard(); return; }
+      if (digit) {
+        const map = { 1: 1, 2: 3, 3: 4, 4: 5 };
+        handleGrade(map[digit]);
+      }
+      return;
+    }
+
+    // --- quiz: 1-4 scelgono l'opzione nell'ordine mostrato
+    if (!$("#view-quiz").hidden) {
+      if (!digit) return;
+      const btn = $$("#quiz-options .option")[digit - 1];
+      if (btn && !btn.disabled) btn.click();
+      return;
+    }
+
+    // --- toni: 1-4 scelgono il tono
+    if (!$("#view-toni").hidden) {
+      if (!digit) return;
+      const btn = $(`#tone-grid .tone-btn[data-tone="${digit}"]`);
+      if (btn && !btn.disabled) btn.click();
+      return;
+    }
+
+    // --- esame: 1-4 scelgono l'opzione, come nel quiz ma senza correzione
+    if (!$("#view-exam").hidden) {
+      if (!digit) return;
+      const btn = $$("#exam-options .option")[digit - 1];
+      if (btn && !btn.disabled) btn.click();
+    }
+  });
+
+  // alcune piattaforme caricano le voci in ritardo
+  if ("speechSynthesis" in window) {
+    speechSynthesis.onvoiceschanged = pickVoice;
+  }
+}
+
+function adjustDailyNew(delta) {
+  state.progress.dailyNew = clamp(state.progress.dailyNew + delta, 0, 200);
+  $("#new-output").textContent = state.progress.dailyNew;
+  afterSettingsChange();
+}
+
+/* ---------------------------------------------------------------------
+   Avvio
+   --------------------------------------------------------------------- */
+
+async function init() {
+  initTheme();
+  state.progress = loadProgress();
+
+  $("#new-output").textContent = state.progress.dailyNew;
+  $$("#set-picker button").forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.set === state.progress.set))
+  );
+
+  try {
+    const doc = await loadDataset();
+    state.words = doc.words;
+    state.meta = doc.meta;
+  } catch (err) {
+    console.error(err);
+    $("#view-flashcard").innerHTML =
+      `<div class="pending">
+         <h2 class="pending__title">Non riesco a caricare il vocabolario</h2>
+         <p class="pending__text">
+           Manca <code>hsk.json</code> o la pagina è aperta come file locale:
+           il fetch richiede un server. Avviala con
+           <code>python3 -m http.server 8000</code> e apri
+           <code>http://localhost:8000</code>.
+         </p>
+       </div>`;
+    return;
+  }
+
+  renderLevelPicker();
+  renderLevelSummary();
+  buildQueue();
+  renderCard();
+  bindEvents();
+
+  const streak = computeStreak();
+  if (streak > 0) document.title = `${streak} · Zìgé · vocabolario HSK`;
+
+  pickVoice();
+}
+
+init();
+</script>
+
+</body>
+</html>
