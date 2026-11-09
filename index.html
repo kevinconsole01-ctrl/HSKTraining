@@ -202,6 +202,13 @@ button {
   max-width: 22rem;
   margin-inline: auto;
   perspective: 1400px;
+  cursor: pointer;
+  /* ombra a due livelli: contatto + alone. A riposo è trasparente, così
+     la carta resta piatta finché non la si tocca. */
+  box-shadow: 0 0 0 0 rgb(0 0 0 / 0), 0 0 0 0 rgb(0 0 0 / 0);
+  transition:
+    transform 240ms cubic-bezier(.2, .8, .25, 1),
+    box-shadow 320ms cubic-bezier(.2, .8, .25, 1);
 }
 
 .drill__inner {
@@ -217,12 +224,89 @@ button {
   inset: 0;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  /* In WebKit il testo dentro la faccia può sfuggire al backface culling
+     (succede col figlio posizionato e con z-index): mostriamo quindi una
+     sola faccia per volta, scambiandole a metà del giro. */
+  opacity: 0;
+  transition: opacity 0s linear 120ms;
   display: grid;
   place-items: center;
   padding: var(--sp-5);
   text-align: center;
 }
+.drill__face--front { opacity: 1; }
 .drill__face--back { transform: rotateY(180deg); }
+.drill.is-flipped .drill__face--front { opacity: 0; }
+.drill.is-flipped .drill__face--back { opacity: 1; }
+
+/* ---------------------------------------------------------------------
+   Interazione: la carta si stacca dal foglio e, a metà giro, un'onda di
+   inchiostro parte dal centro. Nessun colore nuovo: carta, inchiostro,
+   ombra.
+   --------------------------------------------------------------------- */
+
+@media (hover: hover) and (pointer: fine) {
+  .drill:hover {
+    box-shadow:
+      0 18px 36px -28px rgb(0 0 0 / .5),
+      0 2px 6px -4px rgb(0 0 0 / .22);
+  }
+  .drill:hover .drill__grid rect.frame,
+  .drill:hover .drill__grid line.guide { stroke: var(--rule-strong); }
+}
+
+.drill.is-flipped {
+  transform: translateY(-3px);
+  box-shadow:
+    0 22px 44px -30px rgb(0 0 0 / .55),
+    0 3px 8px -5px rgb(0 0 0 / .25);
+}
+
+.drill:active {
+  transform: translateY(0) scale(.985);
+  box-shadow: 0 5px 12px -9px rgb(0 0 0 / .45);
+  transition-duration: 90ms, 120ms;
+}
+
+/* il pulso parte a metà giro, quando la carta è di taglio */
+.drill::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--ink);
+  border-radius: 50%;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(.72);
+  pointer-events: none;
+  z-index: 2;
+}
+.drill.is-pulsing::after {
+  animation: ink-pulse 620ms cubic-bezier(.2, .8, .25, 1) 120ms both;
+}
+
+@keyframes ink-pulse {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(.72); }
+  18%  { opacity: .42; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.16); }
+}
+
+/* il verso non compare di colpo: pinyin, glossa e tradizionale si posano */
+@keyframes card-text-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.drill.is-flipped .drill__face--back .drill__content > * {
+  animation: card-text-in 280ms cubic-bezier(.2, .8, .25, 1) 120ms both;
+}
+.drill.is-flipped .drill__face--back .drill__content > :nth-child(2) {
+  animation-delay: 180ms;
+}
+.drill.is-flipped .drill__face--back .drill__content > :nth-child(3) {
+  animation-delay: 240ms;
+}
 
 /* la griglia: croce e diagonali tratteggiate, come sul quaderno.
    Il tratto deve restare sotto il carattere: se la griglia si vede prima
@@ -234,8 +318,8 @@ button {
   height: 100%;
   pointer-events: none;
 }
-.drill__grid rect.frame { fill: var(--paper-raised); stroke: var(--rule); stroke-width: 1; }
-.drill__grid line.guide { stroke: var(--grid); stroke-width: .75; stroke-dasharray: 4 6; }
+.drill__grid rect.frame { fill: var(--paper-raised); stroke: var(--rule); stroke-width: 1; transition: stroke 200ms ease; }
+.drill__grid line.guide { stroke: var(--grid); stroke-width: .75; stroke-dasharray: 4 6; transition: stroke 200ms ease; }
 
 .drill__content { position: relative; z-index: 1; }
 
@@ -1086,7 +1170,17 @@ button {
 @media (hover: none) { .flip-hint { display: none; } }
 
 @media (prefers-reduced-motion: reduce) {
+  .drill,
+  .drill:hover,
+  .drill:active,
+  .drill.is-flipped {
+    transform: none;
+    box-shadow: none;
+  }
+  .drill.is-pulsing::after { animation: none; opacity: 0; }
+  .drill.is-flipped .drill__face--back .drill__content > * { animation: none; }
   .drill__inner { transition-duration: 1ms; }
+  .drill__face { transition-delay: 0s; }
   * { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
 </style>
@@ -2155,10 +2249,19 @@ function renderQueueProgress() {
   $("#queue-progress").style.width = total ? `${(done / total) * 100}%` : "0%";
 }
 
+let cardPulseTimer = 0;
+
 function flipCard() {
   const index = currentCardIndex();
   if (index === null) return;
-  $("#drill").classList.toggle("is-flipped");
+  const drill = $("#drill");
+  drill.classList.toggle("is-flipped");
+  // riavvia l'onda di inchiostro a ogni giro, anche se il click è rapido
+  drill.classList.remove("is-pulsing");
+  void drill.offsetWidth;
+  drill.classList.add("is-pulsing");
+  clearTimeout(cardPulseTimer);
+  cardPulseTimer = setTimeout(() => drill.classList.remove("is-pulsing"), 800);
 }
 
 function handleGrade(q) {
